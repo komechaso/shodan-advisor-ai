@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: shodan-advisor
+    runtime: docker
+    plan: standard
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+    healthCheckPath: /

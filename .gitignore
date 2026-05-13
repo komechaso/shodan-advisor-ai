@@ -1,0 +1,18 @@
+# 認証情報（絶対にコミットしない）
+credentials.json
+token.json
+.env
+
+# キャッシュ・レポート
+cache/
+reports/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+
+# 一時ファイル
+*.tmp
+*.log

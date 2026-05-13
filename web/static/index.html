@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>商談アドバイスくん</title>
+<style>
+  :root {
+    --primary: #4F46E5;
+    --primary-light: #818CF8;
+    --success: #10B981;
+    --warning: #F59E0B;
+    --danger: #EF4444;
+    --bg: #F1F5F9;
+    --card: #FFFFFF;
+    --border: #E2E8F0;
+    --text: #1E293B;
+    --text-muted: #64748B;
+    --radius: 16px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'Hiragino Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Header */
+  header { background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 20px 32px; display: flex; align-items: center; gap: 14px; box-shadow: 0 2px 16px rgba(79,70,229,0.3); }
+  .logo { width: 44px; height: 44px; background: rgba(255,255,255,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .header-text h1 { color: white; font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+  .header-text p { color: rgba(255,255,255,0.75); font-size: 13px; margin-top: 2px; }
+
+  /* Main container */
+  main { max-width: 860px; margin: 0 auto; padding: 40px 20px; }
+
+  /* Pages */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Upload page */
+  .upload-zone {
+    background: var(--card);
+    border: 2.5px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 60px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: var(--shadow);
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--primary); background: #F0EFFE; }
+  .upload-zone .icon { font-size: 56px; margin-bottom: 16px; }
+  .upload-zone h2 { font-size: 20px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  .upload-zone p { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+  .upload-zone .hint { margin-top: 20px; font-size: 13px; color: var(--text-muted); }
+  .upload-zone .hint span { background: var(--bg); padding: 3px 10px; border-radius: 20px; margin: 0 3px; font-family: monospace; }
+  #file-input { display: none; }
+  .btn-upload { display: inline-block; margin-top: 24px; padding: 12px 32px; background: var(--primary); color: white; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; border: none; transition: opacity 0.15s; }
+  .btn-upload:hover { opacity: 0.9; }
+
+  /* Progress page */
+  .progress-card { background: var(--card); border-radius: var(--radius); padding: 40px; box-shadow: var(--shadow); }
+  .progress-card h2 { font-size: 18px; margin-bottom: 6px; }
+  .progress-card .filename { color: var(--text-muted); font-size: 14px; margin-bottom: 32px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .steps { display: flex; flex-direction: column; gap: 16px; margin-bottom: 32px; }
+  .step { display: flex; align-items: center; gap: 14px; }
+  .step-icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; background: var(--bg); color: var(--text-muted); font-weight: 700; border: 2px solid var(--border); transition: all 0.3s; }
+  .step-icon.done { background: var(--success); color: white; border-color: var(--success); }
+  .step-icon.active { background: var(--primary); color: white; border-color: var(--primary); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(79,70,229,0.4); } 50% { box-shadow: 0 0 0 8px rgba(79,70,229,0); } }
+  .step-label { font-size: 15px; font-weight: 500; }
+  .step-label.done { color: var(--success); }
+  .step-label.active { color: var(--primary); }
+  .step-label.pending { color: var(--text-muted); }
+  .progress-bar-wrap { background: var(--bg); border-radius: 99px; height: 10px; overflow: hidden; }
+  .progress-bar { height: 100%; background: linear-gradient(90deg, #4F46E5, #7C3AED); border-radius: 99px; transition: width 0.5s ease; }
+  .progress-msg { text-align: center; margin-top: 12px; font-size: 14px; color: var(--text-muted); }
+
+  /* Results page */
+  .score-overview { background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); border-radius: var(--radius); padding: 40px; color: white; display: flex; align-items: center; gap: 40px; flex-wrap: wrap; box-shadow: 0 8px 32px rgba(79,70,229,0.3); margin-bottom: 24px; }
+  .gauge-wrap { flex-shrink: 0; }
+  .gauge-info { flex: 1; min-width: 200px; }
+  .gauge-info .grade { font-size: 56px; font-weight: 900; line-height: 1; }
+  .gauge-info .grade-label { font-size: 18px; opacity: 0.9; margin-top: 4px; }
+  .gauge-info .summary { margin-top: 16px; font-size: 14px; line-height: 1.7; opacity: 0.85; }
+
+  /* SVG gauge */
+  .gauge-svg { width: 180px; height: 110px; }
+
+  /* Category scores */
+  .categories { background: var(--card); border-radius: var(--radius); padding: 28px; box-shadow: var(--shadow); margin-bottom: 24px; }
+  .categories h3 { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
+  .cat-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .cat-name { width: 120px; font-size: 14px; flex-shrink: 0; }
+  .cat-bar-wrap { flex: 1; background: var(--bg); border-radius: 99px; height: 12px; overflow: hidden; }
+  .cat-bar { height: 100%; border-radius: 99px; transition: width 0.8s ease; }
+  .cat-score { width: 50px; text-align: right; font-size: 14px; font-weight: 600; flex-shrink: 0; }
+  .cat-comment { font-size: 12px; color: var(--text-muted); width: 100%; padding-left: 132px; margin-top: -8px; margin-bottom: 6px; }
+
+  /* Tabs */
+  .tabs { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .tab-nav { display: flex; border-bottom: 2px solid var(--bg); }
+  .tab-btn { flex: 1; padding: 16px 8px; font-size: 14px; font-weight: 600; border: none; background: none; cursor: pointer; color: var(--text-muted); transition: all 0.2s; position: relative; }
+  .tab-btn.active { color: var(--primary); }
+  .tab-btn.active::after { content: ''; position: absolute; bottom: -2px; left: 0; right: 0; height: 2px; background: var(--primary); }
+  .tab-btn:hover { color: var(--primary); background: #F8FAFF; }
+  .tab-content { padding: 28px; display: none; }
+  .tab-content.active { display: block; }
+
+  /* Strengths */
+  .strength-item { display: flex; gap: 12px; margin-bottom: 12px; padding: 14px 16px; background: #F0FDF4; border-radius: 10px; border-left: 3px solid var(--success); }
+  .strength-item .str-icon { font-size: 18px; flex-shrink: 0; }
+  .strength-item p { font-size: 14px; line-height: 1.6; color: #166534; }
+
+  /* Improvements */
+  .improvement-item { border: 1.5px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .improvement-header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; background: var(--bg); transition: background 0.15s; }
+  .improvement-header:hover { background: #E8ECEF; }
+  .imp-num { width: 26px; height: 26px; background: var(--danger); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+  .improvement-header h4 { flex: 1; font-size: 15px; font-weight: 600; }
+  .improvement-header .chevron { transition: transform 0.2s; font-size: 12px; color: var(--text-muted); }
+  .improvement-header.open .chevron { transform: rotate(180deg); }
+  .improvement-body { display: none; padding: 16px; }
+  .improvement-body.open { display: block; }
+  .imp-section { margin-bottom: 14px; }
+  .imp-section label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px; }
+  .imp-section p { font-size: 14px; line-height: 1.6; }
+  .quote { font-style: italic; color: var(--text-muted); background: var(--bg); padding: 10px 12px; border-radius: 8px; border-left: 3px solid var(--border); }
+  .script { background: #EEF2FF; padding: 12px 14px; border-radius: 8px; border-left: 3px solid var(--primary); font-size: 14px; line-height: 1.6; color: #3730A3; }
+
+  /* Knowledge */
+  .knowledge-item { border: 1.5px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .knowledge-header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; background: var(--bg); }
+  .knowledge-header:hover { background: #E8ECEF; }
+  .know-icon { width: 32px; height: 32px; background: linear-gradient(135deg, #F59E0B, #EF4444); color: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .knowledge-header h4 { flex: 1; font-size: 15px; font-weight: 600; }
+  .knowledge-body { display: none; padding: 16px; }
+  .knowledge-body.open { display: block; }
+  .key-points { list-style: none; margin: 8px 0; }
+  .key-points li { display: flex; gap: 8px; font-size: 14px; line-height: 1.6; margin-bottom: 6px; }
+  .key-points li::before { content: '▶'; color: var(--primary); font-size: 10px; margin-top: 4px; flex-shrink: 0; }
+  .action-box { background: #FFFBEB; border: 1.5px solid #FCD34D; border-radius: 8px; padding: 12px 14px; font-size: 14px; margin-top: 10px; }
+  .action-box span { font-weight: 700; color: #92400E; }
+
+  /* Objection scripts */
+  .objection-item { border: 1.5px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .objection-header { padding: 14px 16px; background: var(--bg); cursor: pointer; display: flex; align-items: flex-start; gap: 10px; }
+  .objection-header:hover { background: #E8ECEF; }
+  .obj-bubble { background: #F1F5F9; border-radius: 12px 12px 12px 4px; padding: 10px 14px; font-size: 14px; flex: 1; line-height: 1.5; }
+  .objection-body { display: none; padding: 16px; }
+  .objection-body.open { display: block; }
+  .response-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; }
+  .response-box { border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.6; }
+  .response-box.before { background: #FEF2F2; border-left: 3px solid var(--danger); }
+  .response-box.after { background: #ECFDF5; border-left: 3px solid var(--success); }
+  .response-box label { font-size: 11px; font-weight: 700; display: block; margin-bottom: 6px; }
+  .response-box.before label { color: #991B1B; }
+  .response-box.after label { color: #065F46; }
+  .why-box { background: var(--bg); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--text-muted); }
+
+  /* New analysis button */
+  .btn-new { display: block; margin: 32px auto 0; padding: 14px 40px; background: var(--primary); color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+  .btn-new:hover { opacity: 0.9; }
+
+  /* Error */
+  .error-card { background: #FEF2F2; border: 1.5px solid #FECACA; border-radius: var(--radius); padding: 28px; text-align: center; color: #991B1B; }
+  .error-card h3 { margin-bottom: 8px; }
+  .error-card p { font-size: 14px; }
+
+  @media (max-width: 600px) {
+    .score-overview { flex-direction: column; align-items: center; text-align: center; }
+    .response-compare { grid-template-columns: 1fr; }
+    .cat-name { width: 80px; font-size: 12px; }
+    .cat-comment { padding-left: 92px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🎯</div>
+  <div class="header-text">
+    <h1>商談アドバイスくん</h1>
+    <p>AIが商談録画を分析して成約率改善をサポート</p>
+  </div>
+</header>
+
+<main>
+  <!-- Upload Page -->
+  <div id="page-upload" class="page active">
+    <div class="upload-zone" id="upload-zone">
+      <div class="icon">📁</div>
+      <h2>商談録画をアップロード</h2>
+      <p>ファイルをここにドロップするか、クリックして選択</p>
+      <div class="hint">
+        対応形式: <span>MP4</span><span>MOV</span><span>M4V</span><span>AVI</span><span>MKV</span>
+        ／ 最大 2GB
+      </div>
+      <button class="btn-upload" onclick="document.getElementById('file-input').click()">ファイルを選択</button>
+      <input type="file" id="file-input" accept=".mp4,.mov,.m4v,.avi,.mkv,video/*">
+    </div>
+  </div>
+
+  <!-- Progress Page -->
+  <div id="page-progress" class="page">
+    <div class="progress-card">
+      <h2>分析中...</h2>
+      <div class="filename" id="progress-filename"></div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-icon" id="si-1">1</div>
+          <div class="step-label" id="sl-1">アップロード</div>
+        </div>
+        <div class="step">
+          <div class="step-icon" id="si-2">2</div>
+          <div class="step-label" id="sl-2">音声抽出</div>
+        </div>
+        <div class="step">
+          <div class="step-icon" id="si-3">3</div>
+          <div class="step-label" id="sl-3">文字起こし</div>
+        </div>
+        <div class="step">
+          <div class="step-icon" id="si-4">4</div>
+          <div class="step-label" id="sl-4">AI分析</div>
+        </div>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+      </div>
+      <div class="progress-msg" id="progress-msg">準備中...</div>
+    </div>
+  </div>
+
+  <!-- Results Page -->
+  <div id="page-result" class="page">
+    <!-- Score Overview -->
+    <div class="score-overview">
+      <div class="gauge-wrap">
+        <svg class="gauge-svg" viewBox="0 0 180 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Background arc -->
+          <path id="gauge-bg" d="" stroke="rgba(255,255,255,0.2)" stroke-width="16" stroke-linecap="round" fill="none"/>
+          <!-- Score arc -->
+          <path id="gauge-arc" d="" stroke="white" stroke-width="16" stroke-linecap="round" fill="none"/>
+          <text x="90" y="80" text-anchor="middle" fill="white" font-size="36" font-weight="900" id="gauge-score-text">0</text>
+          <text x="90" y="100" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="13">点</text>
+        </svg>
+      </div>
+      <div class="gauge-info">
+        <div class="grade" id="result-grade">-</div>
+        <div class="grade-label" id="result-grade-label">-</div>
+        <div class="summary" id="result-summary"></div>
+      </div>
+    </div>
+
+    <!-- Category Scores -->
+    <div class="categories">
+      <h3>カテゴリ別スコア</h3>
+      <div id="category-scores"></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab-nav">
+        <button class="tab-btn active" data-tab="strengths">💪 強み</button>
+        <button class="tab-btn" data-tab="improvements">🔧 改善点</button>
+        <button class="tab-btn" data-tab="knowledge">📚 学習</button>
+        <button class="tab-btn" data-tab="objections">💬 返し集</button>
+      </div>
+      <div id="tab-strengths" class="tab-content active"></div>
+      <div id="tab-improvements" class="tab-content"></div>
+      <div id="tab-knowledge" class="tab-content"></div>
+      <div id="tab-objections" class="tab-content"></div>
+    </div>
+
+    <button class="btn-new" onclick="resetApp()">別の録画を分析する</button>
+  </div>
+
+  <!-- Error Page -->
+  <div id="page-error" class="page">
+    <div class="error-card">
+      <h3>⚠️ エラーが発生しました</h3>
+      <p id="error-message"></p>
+      <br>
+      <button class="btn-new" onclick="resetApp()">やり直す</button>
+    </div>
+  </div>
+</main>
+
+<script>
+const CATEGORIES = {
+  hearing:           { label: 'ヒアリング',       weight: 0.25 },
+  closing:           { label: 'クロージング',     weight: 0.20 },
+  objection_handling:{ label: '反論処理',         weight: 0.20 },
+  proposal:          { label: '提案力',           weight: 0.20 },
+  rapport:           { label: 'ラポール形成',     weight: 0.10 },
+  communication:     { label: 'コミュニケーション', weight: 0.05 },
+};
+const GRADE_INFO = {
+  S: { label: '超一流', color: '#10B981' },
+  A: { label: '一流',   color: '#3B82F6' },
+  B: { label: '成長中', color: '#F59E0B' },
+  C: { label: '要改善', color: '#F97316' },
+  D: { label: '要基礎学習', color: '#EF4444' },
+};
+
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+}
+
+// Drag & drop
+const zone = document.getElementById('upload-zone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+zone.addEventListener('click', () => document.getElementById('file-input').click());
+document.getElementById('file-input').addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+  if (!file) return;
+  const allowed = ['video/mp4','video/quicktime','video/x-msvideo','video/x-matroska','video/m4v','application/octet-stream'];
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (!['mp4','mov','m4v','avi','mkv'].includes(ext)) {
+    alert('対応していないファイル形式です。MP4, MOV, M4V, AVI, MKVをアップロードしてください。');
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024 * 1024) {
+    alert('ファイルサイズが2GBを超えています。録画を圧縮してください。');
+    return;
+  }
+  uploadFile(file);
+}
+
+function setStep(step, state) {
+  const icon = document.getElementById('si-' + step);
+  const label = document.getElementById('sl-' + step);
+  icon.className = 'step-icon ' + state;
+  label.className = 'step-label ' + state;
+  if (state === 'done') icon.textContent = '✓';
+}
+
+function uploadFile(file) {
+  document.getElementById('progress-filename').textContent = file.name;
+  showPage('progress');
+
+  // Show upload step as active
+  setStep(1, 'active');
+  setStep(2, 'pending'); setStep(3, 'pending'); setStep(4, 'pending');
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const xhr = new XMLHttpRequest();
+  xhr.upload.onprogress = e => {
+    if (e.lengthComputable) {
+      const pct = Math.round(e.loaded / e.total * 4);
+      document.getElementById('progress-bar').style.width = pct + '%';
+      document.getElementById('progress-msg').textContent = 'アップロード中... ' + Math.round(e.loaded/e.total*100) + '%';
+    }
+  };
+  xhr.onload = () => {
+    if (xhr.status === 200) {
+      const { job_id } = JSON.parse(xhr.responseText);
+      setStep(1, 'done');
+      streamProgress(job_id);
+    } else {
+      showError('アップロードに失敗しました: ' + xhr.responseText);
+    }
+  };
+  xhr.onerror = () => showError('ネットワークエラーが発生しました');
+  xhr.open('POST', '/api/analyze');
+  xhr.send(formData);
+}
+
+function streamProgress(jobId) {
+  const es = new EventSource('/api/stream/' + jobId);
+  es.onmessage = e => {
+    const data = JSON.parse(e.data);
+
+    if (data.type === 'progress') {
+      const step = data.step;
+      for (let s = 1; s < step; s++) setStep(s, 'done');
+      setStep(step, 'active');
+      for (let s = step + 1; s <= 4; s++) setStep(s, 'pending');
+      document.getElementById('progress-bar').style.width = data.pct + '%';
+      document.getElementById('progress-msg').textContent = data.message;
+    }
+
+    if (data.type === 'done') {
+      es.close();
+      for (let s = 1; s <= 4; s++) setStep(s, 'done');
+      document.getElementById('progress-bar').style.width = '100%';
+      document.getElementById('progress-msg').textContent = '完了！結果を表示します...';
+      setTimeout(() => renderResult(data.result), 600);
+    }
+
+    if (data.type === 'error') {
+      es.close();
+      showError(data.message);
+    }
+  };
+  es.onerror = () => { es.close(); showError('接続エラーが発生しました。ページを再読み込みしてください。'); };
+}
+
+function scoreColor(score) {
+  if (score >= 8) return '#10B981';
+  if (score >= 6) return '#3B82F6';
+  if (score >= 4) return '#F59E0B';
+  return '#EF4444';
+}
+
+function drawGauge(score) {
+  const cx = 90, cy = 100, r = 72;
+  const startAngle = Math.PI;
+  const endAngle = 0;
+
+  function arc(angle) {
+    return { x: cx + r * Math.cos(angle), y: cy - r * Math.sin(angle) };
+  }
+
+  const start = arc(startAngle);
+  const end = arc(endAngle);
+  const bgPath = `M ${start.x} ${start.y} A ${r} ${r} 0 0 1 ${end.x} ${end.y}`;
+  document.getElementById('gauge-bg').setAttribute('d', bgPath);
+
+  const frac = score / 100;
+  const scoreAngle = startAngle + frac * (endAngle - startAngle);
+  const scoreEnd = arc(scoreAngle);
+  const largeArc = frac > 0.5 ? 1 : 0;
+  const scorePath = frac > 0
+    ? `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${scoreEnd.x} ${scoreEnd.y}`
+    : '';
+  document.getElementById('gauge-arc').setAttribute('d', scorePath);
+  document.getElementById('gauge-score-text').textContent = score;
+}
+
+function renderResult(result) {
+  const grade = result.grade || 'C';
+  const gradeInfo = GRADE_INFO[grade] || GRADE_INFO['C'];
+
+  // Score overview
+  drawGauge(result.overall_score);
+  document.getElementById('result-grade').textContent = grade;
+  document.getElementById('result-grade-label').textContent = gradeInfo.label;
+  document.getElementById('result-summary').textContent = result.summary;
+
+  // Category scores
+  const catEl = document.getElementById('category-scores');
+  catEl.innerHTML = '';
+  Object.entries(CATEGORIES).forEach(([key, info]) => {
+    const cat = result.category_scores?.[key] || { score: 5, comment: '', evidence: '' };
+    const pct = cat.score * 10;
+    const color = scoreColor(cat.score);
+    catEl.innerHTML += `
+      <div class="cat-row">
+        <div class="cat-name">${info.label}</div>
+        <div class="cat-bar-wrap"><div class="cat-bar" style="width:${pct}%;background:${color}"></div></div>
+        <div class="cat-score" style="color:${color}">${cat.score}/10</div>
+      </div>
+      ${cat.comment ? `<div class="cat-comment">${cat.comment}</div>` : ''}
+    `;
+  });
+
+  // Strengths
+  const strEl = document.getElementById('tab-strengths');
+  strEl.innerHTML = (result.strengths || []).map(s => `
+    <div class="strength-item">
+      <div class="str-icon">✅</div>
+      <p>${s}</p>
+    </div>
+  `).join('') || '<p style="color:var(--text-muted)">データなし</p>';
+
+  // Improvements
+  const impEl = document.getElementById('tab-improvements');
+  impEl.innerHTML = (result.improvements || []).map((imp, i) => `
+    <div class="improvement-item">
+      <div class="improvement-header" onclick="toggleAccordion(this)">
+        <div class="imp-num">${i + 1}</div>
+        <h4>${imp.issue}</h4>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="improvement-body">
+        <div class="imp-section"><label>問題の詳細</label><p>${imp.detail}</p></div>
+        ${imp.evidence ? `<div class="imp-section"><label>該当する発言</label><p class="quote">"${imp.evidence}"</p></div>` : ''}
+        <div class="imp-section"><label>改善方法</label><p>${imp.how_to_fix}</p></div>
+        <div class="imp-section"><label>改善後の発言例</label><p class="script">${imp.better_script}</p></div>
+      </div>
+    </div>
+  `).join('') || '<p style="color:var(--text-muted)">データなし</p>';
+
+  // Knowledge
+  const knowEl = document.getElementById('tab-knowledge');
+  knowEl.innerHTML = (result.knowledge_topics || []).map((t, i) => `
+    <div class="knowledge-item">
+      <div class="knowledge-header" onclick="toggleAccordion(this)">
+        <div class="know-icon">📖</div>
+        <h4>${t.topic}</h4>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="knowledge-body">
+        <div class="imp-section"><label>なぜ必要か</label><p>${t.why_needed}</p></div>
+        <div class="imp-section"><label>押さえるべきポイント</label>
+          <ul class="key-points">${(t.key_points || []).map(p => `<li>${p}</li>`).join('')}</ul>
+        </div>
+        <div class="action-box"><span>🎯 学習アクション：</span> ${t.recommended_action}</div>
+      </div>
+    </div>
+  `).join('') || '<p style="color:var(--text-muted)">データなし</p>';
+
+  // Objection scripts
+  const objEl = document.getElementById('tab-objections');
+  objEl.innerHTML = (result.objection_scripts || []).map((o, i) => `
+    <div class="objection-item">
+      <div class="objection-header" onclick="toggleAccordion(this)">
+        <div class="obj-bubble">💬 ${o.objection}</div>
+        <span class="chevron" style="flex-shrink:0;margin-top:4px">▼</span>
+      </div>
+      <div class="objection-body">
+        <div class="response-compare">
+          <div class="response-box before">
+            <label>❌ 実際の返し方</label>
+            ${o.actual_response}
+          </div>
+          <div class="response-box after">
+            <label>✅ より効果的な返し方</label>
+            ${o.better_response}
+          </div>
+        </div>
+        <div class="why-box">💡 ${o.why_better}</div>
+      </div>
+    </div>
+  `).join('') || '<p style="color:var(--text-muted)">データなし</p>';
+
+  showPage('result');
+}
+
+function toggleAccordion(header) {
+  header.classList.toggle('open');
+  const body = header.nextElementSibling;
+  body.classList.toggle('open');
+}
+
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+function showError(msg) {
+  document.getElementById('error-message').textContent = msg;
+  showPage('error');
+}
+
+function resetApp() {
+  document.getElementById('file-input').value = '';
+  showPage('upload');
+}
+</script>
+</body>
+</html>
