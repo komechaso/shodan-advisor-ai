@@ -203,6 +203,19 @@
   .btn-compress-secondary { width: 100%; padding: 10px; background: none; color: var(--text-muted); border: 1.5px solid var(--border); border-radius: 10px; font-size: 13px; cursor: pointer; margin-top: 8px; }
   .btn-compress-secondary:hover { border-color: #94A3B8; color: var(--text); }
 
+  /* Drive URL input */
+  .divider { display: flex; align-items: center; gap: 12px; margin: 24px 0; color: var(--text-muted); font-size: 13px; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .drive-input-wrap { background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 20px 24px; box-shadow: var(--shadow); }
+  .drive-input-wrap label { display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 10px; }
+  .drive-row { display: flex; gap: 10px; }
+  .drive-row input { flex: 1; padding: 10px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 14px; color: var(--text); background: var(--bg); outline: none; transition: border-color 0.15s; }
+  .drive-row input:focus { border-color: var(--primary); background: white; }
+  .drive-row input::placeholder { color: #94A3B8; }
+  .btn-drive { padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: opacity 0.15s; }
+  .btn-drive:hover { opacity: 0.9; }
+  .drive-hint { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+
   @media (max-width: 600px) {
     .score-overview { flex-direction: column; align-items: center; text-align: center; }
     .response-compare { grid-template-columns: 1fr; }
@@ -237,6 +250,17 @@
       </div>
       <button class="btn-upload" onclick="document.getElementById('file-input').click()">ファイルを選択</button>
       <input type="file" id="file-input" accept=".mp4,.mov,.m4v,.avi,.mkv,video/*">
+    </div>
+
+    <div class="divider">または</div>
+
+    <div class="drive-input-wrap">
+      <label>🔗 Google DriveのURLから分析</label>
+      <div class="drive-row">
+        <input type="text" id="drive-url" placeholder="https://drive.google.com/file/d/..." autocomplete="off">
+        <button class="btn-drive" onclick="submitDriveUrl()">分析開始</button>
+      </div>
+      <div class="drive-hint">「リンクを知っている全員が閲覧可」に設定した動画ファイルのURLを貼り付けてください</div>
     </div>
   </div>
 
@@ -832,6 +856,47 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
+async function submitDriveUrl() {
+  const input = document.getElementById('drive-url');
+  const url = input.value.trim();
+  if (!url) { input.focus(); return; }
+  if (!url.includes('drive.google.com') && !url.includes('docs.google.com')) {
+    alert('Google DriveのURLを入力してください。\n例: https://drive.google.com/file/d/...');
+    return;
+  }
+
+  document.getElementById('progress-filename').textContent = 'Google Drive';
+  document.getElementById('sl-1').textContent = 'Driveからダウンロード';
+  showPage('progress');
+  setStep(1, 'active');
+  setStep(2, 'pending'); setStep(3, 'pending'); setStep(4, 'pending');
+  document.getElementById('progress-bar').style.width = '3%';
+  document.getElementById('progress-msg').textContent = 'Google Driveに接続中...';
+
+  const formData = new FormData();
+  formData.append('url', url);
+
+  try {
+    const resp = await fetch('/api/analyze-drive', { method: 'POST', body: formData });
+    if (!resp.ok) {
+      const msg = await resp.text();
+      showError('エラー: ' + msg);
+      return;
+    }
+    const { job_id } = await resp.json();
+    streamProgress(job_id);
+  } catch (err) {
+    showError('接続エラー: ' + err.message);
+  }
+}
+
+// Allow Enter key to submit Drive URL
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('drive-url')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitDriveUrl();
+  });
+});
+
 function showError(msg) {
   document.getElementById('error-message').textContent = msg;
   showPage('error');
@@ -839,6 +904,8 @@ function showError(msg) {
 
 function resetApp() {
   document.getElementById('file-input').value = '';
+  document.getElementById('drive-url').value = '';
+  document.getElementById('sl-1').textContent = 'アップロード';
   currentFile = null;
   showPage('upload');
 }

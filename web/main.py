@@ -137,6 +137,52 @@ async def stream_status(job_id: str):
     )
 
 
+def _download_and_process(job_id: str, drive_url: str) -> None:
+    """Download from Google Drive then run the normal analysis pipeline."""
+    tmpdir = tempfile.mkdtemp()
+    try:
+        _push(job_id, {"type": "progress", "step": 1, "pct": 5,
+                       "message": "Google Driveからダウンロード中（大容量ファイルは数分〜数十分かかります）..."})
+        import gdown
+        result = gdown.download(drive_url, tmpdir + "/", quiet=True, fuzzy=True)
+
+        if not result or not Path(result).exists():
+            raise RuntimeError(
+                "ダウンロードに失敗しました。\n"
+                "ファイルが「リンクを知っている全員が閲覧可」に設定されているか確認してください。"
+            )
+
+        file_name = Path(result).name
+        _push(job_id, {"type": "progress", "step": 1, "pct": 28,
+                       "message": f"ダウンロード完了（{file_name}）"})
+        _process(job_id, result, file_name)
+
+    except Exception as exc:
+        _push(job_id, {"type": "error", "message": str(exc)})
+        _jobs[job_id]["done"] = True
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@app.post("/api/analyze-drive")
+async def analyze_drive(url: str = Form(...)):
+    if not url.strip():
+        raise HTTPException(400, "URLが指定されていません")
+    if "drive.google.com" not in url and "docs.google.com" not in url:
+        raise HTTPException(400, "Google DriveのURLを指定してください")
+
+    job_id = str(uuid.uuid4())
+    _jobs[job_id] = {"events": [], "done": False}
+
+    thread = threading.Thread(
+        target=_download_and_process,
+        args=(job_id, url.strip()),
+        daemon=True,
+    )
+    thread.start()
+
+    return {"job_id": job_id}
+
+
 @app.post("/api/upload-chunk")
 async def upload_chunk(
     job_id: str = Form(...),
