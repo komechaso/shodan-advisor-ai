@@ -233,7 +233,7 @@
         ／ 音声: <span>MP3</span><span>M4A</span><span>WAV</span>
       </div>
       <div class="hint" style="margin-top:8px;color:#94A3B8">
-        💡 大きな動画は音声だけ抽出してアップロードすると高速です
+        💡 大容量ファイル（9GBなど）もそのままアップロードOK。音声抽出はサーバーが自動で行います
       </div>
       <button class="btn-upload" onclick="document.getElementById('file-input').click()">ファイルを選択</button>
       <input type="file" id="file-input" accept=".mp4,.mov,.m4v,.avi,.mkv,video/*">
@@ -287,8 +287,8 @@
         </div>
       </div>
 
-      <!-- Option 3: Upload as-is -->
-      <button class="btn-compress-secondary" onclick="uploadFile(currentFile)">
+      <!-- Option 3: Chunked upload as-is -->
+      <button class="btn-compress-secondary" onclick="startChunkedUpload(currentFile)">
         そのままアップロード（長時間かかる場合があります）
       </button>
     </div>
@@ -380,8 +380,9 @@
 </main>
 
 <script>
-const DIRECT_UPLOAD_LIMIT = 50 * 1024 * 1024;   // 50MB: そのままアップロード
-const BROWSER_COMPRESS_LIMIT = 200 * 1024 * 1024; // 200MB: ブラウザ処理を表示
+const DIRECT_UPLOAD_LIMIT = 50 * 1024 * 1024;     // 50MB: single-part upload
+const BROWSER_COMPRESS_LIMIT = 200 * 1024 * 1024;  // 200MB: show browser compress option
+const CHUNK_SIZE = 50 * 1024 * 1024;               // 50MB per chunk
 let currentFile = null;
 let ffmpegInstance = null;
 
@@ -515,18 +516,22 @@ document.getElementById('file-input').addEventListener('change', e => { if (e.ta
 function handleFile(file) {
   if (!file) return;
   const ext = file.name.split('.').pop().toLowerCase();
-  const isAudio = ['mp3', 'm4a', 'wav', 'aac'].includes(ext);
-  if (!['mp4','mov','m4v','avi','mkv','mp3','m4a','wav','aac'].includes(ext)) {
+  const isAudio = ['mp3', 'm4a', 'wav', 'aac', 'ogg', 'flac'].includes(ext);
+  if (!['mp4','mov','m4v','avi','mkv','mp3','m4a','wav','aac','ogg','flac'].includes(ext)) {
     alert('対応していないファイル形式です。\n動画: MP4, MOV, M4V, AVI, MKV\n音声: MP3, M4A, WAV, AAC');
     return;
   }
   currentFile = file;
 
-  // 音声ファイル or 50MB以下 → そのままアップロード
   if (isAudio || file.size <= DIRECT_UPLOAD_LIMIT) {
+    // Small or audio: single-part upload
     uploadFile(file);
-  } else {
+  } else if (file.size <= BROWSER_COMPRESS_LIMIT) {
+    // Medium (50-200MB): offer browser ffmpeg compression or chunked upload
     showCompressPanel(file);
+  } else {
+    // Large (>200MB): chunked upload directly to server, ffmpeg runs server-side
+    startChunkedUpload(file);
   }
 }
 
@@ -569,6 +574,66 @@ function uploadFile(file) {
   xhr.onerror = () => showError('ネットワークエラーが発生しました');
   xhr.open('POST', '/api/analyze');
   xhr.send(formData);
+}
+
+function genUUID() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+async function startChunkedUpload(file) {
+  const jobId = genUUID();
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+  document.getElementById('progress-filename').textContent = file.name;
+  showPage('progress');
+  setStep(1, 'active');
+  setStep(2, 'pending'); setStep(3, 'pending'); setStep(4, 'pending');
+  document.getElementById('progress-bar').style.width = '0%';
+  document.getElementById('progress-msg').textContent = 'アップロード準備中...';
+
+  try {
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const chunkBlob = file.slice(start, Math.min(start + CHUNK_SIZE, file.size));
+
+      const formData = new FormData();
+      formData.append('job_id', jobId);
+      formData.append('chunk_index', i);
+      formData.append('total_chunks', totalChunks);
+      formData.append('file_name', file.name);
+      formData.append('chunk', chunkBlob, file.name);
+
+      let success = false;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const resp = await fetch('/api/upload-chunk', { method: 'POST', body: formData });
+          if (resp.ok) { success = true; break; }
+        } catch (_) {}
+        if (attempt < 2) await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+      }
+      if (!success) throw new Error(`チャンク ${i + 1}/${totalChunks} のアップロードに失敗しました`);
+
+      const pct = Math.round((i + 1) / totalChunks * 25);
+      document.getElementById('progress-bar').style.width = pct + '%';
+      document.getElementById('progress-msg').textContent =
+        `アップロード中... ${Math.round((i + 1) / totalChunks * 100)}%（${i + 1}/${totalChunks}）`;
+    }
+
+    setStep(1, 'done');
+    document.getElementById('progress-bar').style.width = '28%';
+    document.getElementById('progress-msg').textContent = 'アップロード完了。サーバーで処理を開始します...';
+
+    const resp = await fetch(`/api/start-analysis/${jobId}`, { method: 'POST' });
+    if (!resp.ok) throw new Error(await resp.text());
+
+    streamProgress(jobId);
+  } catch (err) {
+    showError('アップロードに失敗しました: ' + err.message);
+  }
 }
 
 function streamProgress(jobId) {

@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -24,10 +24,13 @@ from web.analyzer_web import analyze_transcript
 app = FastAPI(title="商談アドバイスくん")
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
-MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024  # 2GB
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024  # 2GB (single-part upload)
 
 # Job store: {job_id: {"events": [...], "done": bool}}
 _jobs: dict[str, dict] = {}
+
+# Chunk store for large file uploads: {job_id: {"total": N, "received": N, "file_path": str, "name": str, "dir": str}}
+_chunks: dict[str, dict] = {}
 
 
 def _push(job_id: str, event: dict) -> None:
@@ -132,6 +135,62 @@ async def stream_status(job_id: str):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/api/upload-chunk")
+async def upload_chunk(
+    job_id: str = Form(...),
+    chunk_index: int = Form(...),
+    total_chunks: int = Form(...),
+    file_name: str = Form(...),
+    chunk: UploadFile = File(...),
+):
+    """Receive one chunk of a large file. Chunks must arrive in order 0,1,2,..."""
+    if job_id not in _chunks:
+        tmpdir = tempfile.mkdtemp()
+        safe_name = Path(file_name).name if file_name else "recording.mp4"
+        _chunks[job_id] = {
+            "total": total_chunks,
+            "received": 0,
+            "dir": tmpdir,
+            "name": safe_name,
+            "file_path": str(Path(tmpdir) / safe_name),
+        }
+        _jobs[job_id] = {"events": [], "done": False}
+
+    store = _chunks[job_id]
+
+    with open(store["file_path"], "ab") as f:
+        while True:
+            data = await chunk.read(4 * 1024 * 1024)
+            if not data:
+                break
+            f.write(data)
+
+    store["received"] += 1
+    return {"received": chunk_index, "total": total_chunks}
+
+
+@app.post("/api/start-analysis/{job_id}")
+async def start_chunked_analysis(job_id: str):
+    """Start analysis after all chunks have been uploaded."""
+    if job_id not in _chunks:
+        raise HTTPException(404, "ジョブが見つかりません")
+
+    store = _chunks.pop(job_id)
+    file_path = store["file_path"]
+    safe_name = store["name"]
+
+    _push(job_id, {"type": "progress", "step": 1, "pct": 5, "message": "アップロード完了"})
+
+    thread = threading.Thread(
+        target=_process,
+        args=(job_id, file_path, safe_name),
+        daemon=True,
+    )
+    thread.start()
+
+    return {"job_id": job_id}
 
 
 if __name__ == "__main__":
