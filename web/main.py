@@ -138,17 +138,56 @@ async def stream_status(job_id: str):
 
 
 import re as _re
+import urllib.request as _urllib_request
+import http.cookiejar as _cookiejar
 
-def _drive_to_download_url(url: str) -> str:
-    """Extract file ID and return canonical gdown-compatible URL."""
+
+def _extract_drive_file_id(url: str) -> str:
     for pattern in [r'/file/d/([a-zA-Z0-9_-]+)', r'[?&]id=([a-zA-Z0-9_-]+)']:
         m = _re.search(pattern, url)
         if m:
-            return f"https://drive.google.com/uc?id={m.group(1)}"
+            return m.group(1)
     raise RuntimeError(
         "URLからファイルIDを取得できませんでした。\n"
         "Google Driveの「共有」→「リンクをコピー」で取得したURLを貼り付けてください。"
     )
+
+
+def _download_drive_file(file_id: str, out_dir: str) -> str:
+    """Download a public Google Drive file using urllib (no extra deps)."""
+    jar = _cookiejar.CookieJar()
+    opener = _urllib_request.build_opener(_urllib_request.HTTPCookieProcessor(jar))
+    opener.addheaders = [("User-Agent", "Mozilla/5.0")]
+
+    base_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    resp = opener.open(base_url)
+
+    # Large files show a virus-scan warning — extract the confirm token
+    confirm = next((c.value for c in jar if c.name.startswith("download_warning")), None)
+    if confirm:
+        resp = opener.open(f"{base_url}&confirm={confirm}")
+
+    # Determine filename from Content-Disposition header
+    cd = resp.headers.get("Content-Disposition", "")
+    fname_match = _re.findall(r'filename[^;=\n]*=([^;\n]*)', cd)
+    fname = fname_match[0].strip().strip('"') if fname_match else f"recording_{file_id}.mp4"
+    # Sanitize filename
+    fname = Path(fname).name or f"recording_{file_id}.mp4"
+
+    out_path = Path(out_dir) / fname
+    with open(out_path, "wb") as f:
+        while True:
+            chunk = resp.read(65536)
+            if not chunk:
+                break
+            f.write(chunk)
+
+    if out_path.stat().st_size == 0:
+        raise RuntimeError(
+            "ダウンロードしたファイルが空です。\n"
+            "ファイルが「リンクを知っている全員が閲覧可」に設定されているか確認してください。"
+        )
+    return str(out_path)
 
 
 def _download_and_process(job_id: str, drive_url: str) -> None:
@@ -157,20 +196,14 @@ def _download_and_process(job_id: str, drive_url: str) -> None:
     try:
         _push(job_id, {"type": "progress", "step": 1, "pct": 5,
                        "message": "Google Driveからダウンロード中（大容量ファイルは数分〜数十分かかります）..."})
-        import gdown
-        download_url = _drive_to_download_url(drive_url)
-        result = gdown.download(download_url, tmpdir + "/", quiet=True)
 
-        if not result or not Path(result).exists():
-            raise RuntimeError(
-                "ダウンロードに失敗しました。\n"
-                "ファイルが「リンクを知っている全員が閲覧可」に設定されているか確認してください。"
-            )
+        file_id = _extract_drive_file_id(drive_url)
+        file_path = _download_drive_file(file_id, tmpdir)
+        file_name = Path(file_path).name
 
-        file_name = Path(result).name
         _push(job_id, {"type": "progress", "step": 1, "pct": 28,
                        "message": f"ダウンロード完了（{file_name}）"})
-        _process(job_id, result, file_name)
+        _process(job_id, file_path, file_name)
 
     except Exception as exc:
         _push(job_id, {"type": "error", "message": str(exc)})

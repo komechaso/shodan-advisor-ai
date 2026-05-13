@@ -687,7 +687,7 @@ function streamProgress(jobId) {
       showError(data.message);
     }
   };
-  es.onerror = () => { es.close(); showError('接続エラーが発生しました。ページを再読み込みしてください。'); };
+  es.onerror = () => { es.close(); showError('サーバーとの接続が切れました。\n処理に時間がかかっている場合は少し待ってからページを再読み込みしてください。\n繰り返し発生する場合は、ファイルサイズが大きすぎる可能性があります。'); };
 }
 
 function scoreColor(score) {
