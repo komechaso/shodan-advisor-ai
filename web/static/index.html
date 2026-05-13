@@ -165,6 +165,31 @@
   .error-card h3 { margin-bottom: 8px; }
   .error-card p { font-size: 14px; }
 
+  /* Compression panel */
+  .compress-card { background: var(--card); border-radius: var(--radius); padding: 40px; box-shadow: var(--shadow); }
+  .compress-card h2 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+  .compress-subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
+  .compress-warning { background: #FFFBEB; border: 1.5px solid #FCD34D; border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+  .compress-warning .warn-icon { font-size: 28px; flex-shrink: 0; }
+  .compress-warning .warn-text strong { display: block; color: #92400E; margin-bottom: 2px; }
+  .compress-warning .warn-text span { font-size: 13px; color: #B45309; }
+  .compress-option { border: 2px solid var(--primary); border-radius: 12px; padding: 20px; background: #F0EFFE; display: flex; gap: 16px; align-items: center; margin-bottom: 24px; }
+  .compress-option .opt-icon { font-size: 32px; flex-shrink: 0; }
+  .compress-option strong { display: block; font-size: 16px; margin-bottom: 4px; }
+  .compress-option .opt-desc { font-size: 13px; color: var(--text-muted); }
+  .compress-option .opt-badge { display: inline-block; background: var(--success); color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin-left: 6px; vertical-align: middle; }
+  .compress-progress-wrap { margin-bottom: 20px; display: none; }
+  .compress-progress-wrap .compress-step { font-size: 14px; color: var(--text-muted); margin-bottom: 8px; }
+  .compress-bar-outer { background: var(--bg); border-radius: 99px; height: 10px; overflow: hidden; }
+  .compress-bar-inner { height: 100%; background: linear-gradient(90deg, #4F46E5, #7C3AED); border-radius: 99px; transition: width 0.3s; }
+  .compress-size-after { font-size: 13px; color: var(--success); margin-top: 8px; font-weight: 600; display: none; }
+  .compress-actions { display: flex; flex-direction: column; gap: 10px; }
+  .btn-compress-primary { padding: 14px; background: var(--primary); color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+  .btn-compress-primary:hover { opacity: 0.9; }
+  .btn-compress-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-compress-secondary { padding: 12px; background: none; color: var(--text-muted); border: 1.5px solid var(--border); border-radius: 10px; font-size: 14px; cursor: pointer; transition: all 0.15s; }
+  .btn-compress-secondary:hover { border-color: var(--text-muted); color: var(--text); }
+
   @media (max-width: 600px) {
     .score-overview { flex-direction: column; align-items: center; text-align: center; }
     .response-compare { grid-template-columns: 1fr; }
@@ -196,6 +221,47 @@
       </div>
       <button class="btn-upload" onclick="document.getElementById('file-input').click()">ファイルを選択</button>
       <input type="file" id="file-input" accept=".mp4,.mov,.m4v,.avi,.mkv,video/*">
+    </div>
+  </div>
+
+  <!-- Compression Page -->
+  <div id="page-compress" class="page">
+    <div class="compress-card">
+      <h2>⚠️ ファイルが大きすぎます</h2>
+      <div class="compress-subtitle" id="compress-subtitle"></div>
+
+      <div class="compress-warning">
+        <div class="warn-icon">📦</div>
+        <div class="warn-text">
+          <strong id="compress-warn-title"></strong>
+          <span>アップロード前にブラウザ内で音声を抽出すると、大幅に速くなります。</span>
+        </div>
+      </div>
+
+      <div class="compress-option">
+        <div class="opt-icon">🎵</div>
+        <div>
+          <strong>音声のみ抽出 <span class="opt-badge">推奨</span></strong>
+          <div class="opt-desc">ブラウザ内でMP3に変換してからアップロード。<br>約10〜40MBに圧縮されるため大幅に速くなります。</div>
+        </div>
+      </div>
+
+      <div class="compress-progress-wrap" id="compress-progress-wrap">
+        <div class="compress-step" id="compress-step-msg">ffmpegを読み込み中...</div>
+        <div class="compress-bar-outer">
+          <div class="compress-bar-inner" id="compress-bar" style="width:0%"></div>
+        </div>
+        <div class="compress-size-after" id="compress-size-after"></div>
+      </div>
+
+      <div class="compress-actions" id="compress-actions">
+        <button class="btn-compress-primary" id="btn-do-compress" onclick="startCompression()">
+          🎵 音声を抽出してアップロード
+        </button>
+        <button class="btn-compress-secondary" onclick="uploadFile(currentFile)">
+          そのままアップロード（時間がかかる場合があります）
+        </button>
+      </div>
     </div>
   </div>
 
@@ -285,6 +351,76 @@
 </main>
 
 <script>
+const COMPRESS_THRESHOLD = 300 * 1024 * 1024; // 300MB
+let currentFile = null;
+let ffmpegInstance = null;
+
+function formatSize(bytes) {
+  if (bytes >= 1024 ** 3) return (bytes / 1024 ** 3).toFixed(1) + ' GB';
+  if (bytes >= 1024 ** 2) return (bytes / 1024 ** 2).toFixed(0) + ' MB';
+  return (bytes / 1024).toFixed(0) + ' KB';
+}
+
+async function loadFFmpeg() {
+  if (ffmpegInstance) return ffmpegInstance;
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js';
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  const { FFmpeg } = window.FFmpegWASM;
+  ffmpegInstance = new FFmpeg();
+  ffmpegInstance.on('progress', ({ progress }) => {
+    const pct = Math.min(99, Math.round(progress * 100));
+    document.getElementById('compress-bar').style.width = pct + '%';
+    document.getElementById('compress-step-msg').textContent = `音声抽出中... ${pct}%`;
+  });
+  await ffmpegInstance.load({
+    coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
+    wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm',
+  });
+  return ffmpegInstance;
+}
+
+async function startCompression() {
+  document.getElementById('btn-do-compress').disabled = true;
+  document.getElementById('compress-progress-wrap').style.display = 'block';
+  document.getElementById('compress-step-msg').textContent = 'ffmpegを読み込み中（初回のみ時間がかかります）...';
+
+  try {
+    const ffmpeg = await loadFFmpeg();
+    const { fetchFile } = await import('https://unpkg.com/@ffmpeg/util@0.12.2/dist/esm/index.js');
+
+    document.getElementById('compress-step-msg').textContent = 'ファイルを読み込み中...';
+    const ext = currentFile.name.split('.').pop().toLowerCase();
+    await ffmpeg.writeFile(`input.${ext}`, await fetchFile(currentFile));
+
+    document.getElementById('compress-step-msg').textContent = '音声抽出中... 0%';
+    await ffmpeg.exec(['-i', `input.${ext}`, '-vn', '-ar', '16000', '-ac', '1', '-b:a', '64k', 'output.mp3']);
+
+    const data = await ffmpeg.readFile('output.mp3');
+    const blob = new Blob([data.buffer], { type: 'audio/mpeg' });
+    const audioFile = new File([blob], currentFile.name.replace(/\.[^.]+$/, '') + '_audio.mp3', { type: 'audio/mpeg' });
+
+    document.getElementById('compress-bar').style.width = '100%';
+    document.getElementById('compress-step-msg').textContent = '完了！';
+    document.getElementById('compress-size-after').style.display = 'block';
+    document.getElementById('compress-size-after').textContent =
+      `${formatSize(currentFile.size)} → ${formatSize(blob.size)} に圧縮完了 ✓`;
+
+    await ffmpeg.deleteFile(`input.${ext}`);
+    await ffmpeg.deleteFile('output.mp3');
+
+    setTimeout(() => uploadFile(audioFile), 800);
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById('compress-step-msg').textContent = '❌ 圧縮に失敗しました。そのままアップロードします。';
+    setTimeout(() => uploadFile(currentFile), 1500);
+  }
+}
+
 const CATEGORIES = {
   hearing:           { label: 'ヒアリング',       weight: 0.25 },
   closing:           { label: 'クロージング',     weight: 0.20 },
@@ -316,17 +452,33 @@ document.getElementById('file-input').addEventListener('change', e => { if (e.ta
 
 function handleFile(file) {
   if (!file) return;
-  const allowed = ['video/mp4','video/quicktime','video/x-msvideo','video/x-matroska','video/m4v','application/octet-stream'];
   const ext = file.name.split('.').pop().toLowerCase();
-  if (!['mp4','mov','m4v','avi','mkv'].includes(ext)) {
+  const isAudio = ['mp3', 'm4a', 'wav', 'aac'].includes(ext);
+  if (!['mp4','mov','m4v','avi','mkv','mp3','m4a','wav','aac'].includes(ext)) {
     alert('対応していないファイル形式です。MP4, MOV, M4V, AVI, MKVをアップロードしてください。');
     return;
   }
   if (file.size > 2 * 1024 * 1024 * 1024) {
-    alert('ファイルサイズが2GBを超えています。録画を圧縮してください。');
+    alert('ファイルサイズが2GBを超えています。圧縮機能をご利用ください。');
     return;
   }
-  uploadFile(file);
+  currentFile = file;
+
+  if (!isAudio && file.size > COMPRESS_THRESHOLD) {
+    // 大きなファイル → 圧縮パネルへ
+    document.getElementById('compress-subtitle').textContent = `${file.name}（${formatSize(file.size)}）`;
+    document.getElementById('compress-warn-title').textContent =
+      `このファイルは ${formatSize(file.size)} あります。アップロードに時間がかかる可能性があります。`;
+    // リセット
+    document.getElementById('compress-progress-wrap').style.display = 'none';
+    document.getElementById('compress-size-after').style.display = 'none';
+    document.getElementById('compress-bar').style.width = '0%';
+    document.getElementById('btn-do-compress').disabled = false;
+    document.getElementById('compress-actions').style.display = 'flex';
+    showPage('compress');
+  } else {
+    uploadFile(file);
+  }
 }
 
 function setStep(step, state) {
@@ -555,6 +707,7 @@ function showError(msg) {
 
 function resetApp() {
   document.getElementById('file-input').value = '';
+  currentFile = null;
   showPage('upload');
 }
 </script>
