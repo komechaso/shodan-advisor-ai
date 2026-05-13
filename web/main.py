@@ -155,23 +155,28 @@ def _extract_drive_file_id(url: str) -> str:
 
 def _download_drive_file(file_id: str, out_dir: str) -> str:
     """Download a public Google Drive file using urllib (no extra deps)."""
-    jar = _cookiejar.CookieJar()
-    opener = _urllib_request.build_opener(_urllib_request.HTTPCookieProcessor(jar))
-    opener.addheaders = [("User-Agent", "Mozilla/5.0")]
+    import urllib.error
 
-    base_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-    resp = opener.open(base_url)
+    # drive.usercontent.google.com + confirm=t bypasses virus-scan warning for large files
+    url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
+    req = _urllib_request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
 
-    # Large files show a virus-scan warning — extract the confirm token
-    confirm = next((c.value for c in jar if c.name.startswith("download_warning")), None)
-    if confirm:
-        resp = opener.open(f"{base_url}&confirm={confirm}")
+    try:
+        resp = _urllib_request.urlopen(req, timeout=7200)  # 2hr timeout
+    except urllib.error.HTTPError as e:
+        if e.code == 403:
+            raise RuntimeError(
+                "アクセスが拒否されました（HTTP 403）。\n"
+                "ファイルが「リンクを知っている全員が閲覧可」に設定されているか確認してください。"
+            )
+        raise RuntimeError(f"ダウンロードに失敗しました（HTTP {e.code}）。")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"ネットワークエラー: {e.reason}")
 
     # Determine filename from Content-Disposition header
     cd = resp.headers.get("Content-Disposition", "")
     fname_match = _re.findall(r'filename[^;=\n]*=([^;\n]*)', cd)
     fname = fname_match[0].strip().strip('"') if fname_match else f"recording_{file_id}.mp4"
-    # Sanitize filename
     fname = Path(fname).name or f"recording_{file_id}.mp4"
 
     out_path = Path(out_dir) / fname

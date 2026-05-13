@@ -661,7 +661,9 @@ async function startChunkedUpload(file) {
 }
 
 function streamProgress(jobId) {
+  let finished = false;
   const es = new EventSource('/api/stream/' + jobId);
+
   es.onmessage = e => {
     const data = JSON.parse(e.data);
 
@@ -675,6 +677,7 @@ function streamProgress(jobId) {
     }
 
     if (data.type === 'done') {
+      finished = true;
       es.close();
       for (let s = 1; s <= 4; s++) setStep(s, 'done');
       document.getElementById('progress-bar').style.width = '100%';
@@ -683,11 +686,19 @@ function streamProgress(jobId) {
     }
 
     if (data.type === 'error') {
+      finished = true;
       es.close();
       showError(data.message);
     }
   };
-  es.onerror = () => { es.close(); showError('サーバーとの接続が切れました。\n処理に時間がかかっている場合は少し待ってからページを再読み込みしてください。\n繰り返し発生する場合は、ファイルサイズが大きすぎる可能性があります。'); };
+
+  es.onerror = () => {
+    if (finished) return; // normal close after done/error — ignore
+    es.close();
+    showError('サーバーとの接続が切れました。\n' +
+      '・Google Driveの場合: ファイルが「リンクを知っている全員が閲覧可」になっているか確認してください\n' +
+      '・ファイルアップロードの場合: ページを再読み込みして再試行してください');
+  };
 }
 
 function scoreColor(score) {
