@@ -115,8 +115,9 @@ async def stream_status(job_id: str):
         raise HTTPException(404, "ジョブが見つかりません")
 
     async def generator():
-        sent = 0
         import asyncio
+        sent = 0
+        ticks = 0
         while True:
             job = _jobs.get(job_id, {})
             events = job.get("events", [])
@@ -124,9 +125,17 @@ async def stream_status(job_id: str):
             for ev in events[sent:]:
                 yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
                 sent += 1
+                ticks = 0
 
             if job.get("done") and sent >= len(events):
+                # Linger 2s so client finishes parsing events before stream closes
+                await asyncio.sleep(2)
                 break
+
+            ticks += 1
+            # Keepalive comment every ~15s to prevent Render proxy timeout
+            if ticks % 37 == 0:
+                yield ": ping\n\n"
 
             await asyncio.sleep(0.4)
 
@@ -214,6 +223,32 @@ def _download_and_process(job_id: str, drive_url: str) -> None:
         _push(job_id, {"type": "error", "message": str(exc)})
         _jobs[job_id]["done"] = True
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@app.get("/api/test-drive")
+async def test_drive_url(url: str):
+    """Diagnostic: test if a Google Drive URL is downloadable."""
+    import urllib.error
+    try:
+        file_id = _extract_drive_file_id(url)
+        req = _urllib_request.Request(
+            f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t",
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        resp = _urllib_request.urlopen(req, timeout=15)
+        info = {
+            "ok": True,
+            "file_id": file_id,
+            "content_type": resp.headers.get("Content-Type", ""),
+            "content_disposition": resp.headers.get("Content-Disposition", ""),
+            "content_length": resp.headers.get("Content-Length", "unknown"),
+        }
+        resp.close()
+        return info
+    except urllib.error.HTTPError as e:
+        return {"ok": False, "file_id": _extract_drive_file_id(url), "http_error": e.code}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "type": type(e).__name__}
 
 
 @app.post("/api/analyze-drive")
