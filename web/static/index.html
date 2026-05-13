@@ -166,29 +166,42 @@
   .error-card p { font-size: 14px; }
 
   /* Compression panel */
-  .compress-card { background: var(--card); border-radius: var(--radius); padding: 40px; box-shadow: var(--shadow); }
-  .compress-card h2 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
-  .compress-subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
-  .compress-warning { background: #FFFBEB; border: 1.5px solid #FCD34D; border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
-  .compress-warning .warn-icon { font-size: 28px; flex-shrink: 0; }
-  .compress-warning .warn-text strong { display: block; color: #92400E; margin-bottom: 2px; }
-  .compress-warning .warn-text span { font-size: 13px; color: #B45309; }
-  .compress-option { border: 2px solid var(--primary); border-radius: 12px; padding: 20px; background: #F0EFFE; display: flex; gap: 16px; align-items: center; margin-bottom: 24px; }
-  .compress-option .opt-icon { font-size: 32px; flex-shrink: 0; }
-  .compress-option strong { display: block; font-size: 16px; margin-bottom: 4px; }
-  .compress-option .opt-desc { font-size: 13px; color: var(--text-muted); }
-  .compress-option .opt-badge { display: inline-block; background: var(--success); color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; margin-left: 6px; vertical-align: middle; }
-  .compress-progress-wrap { margin-bottom: 20px; display: none; }
-  .compress-progress-wrap .compress-step { font-size: 14px; color: var(--text-muted); margin-bottom: 8px; }
-  .compress-bar-outer { background: var(--bg); border-radius: 99px; height: 10px; overflow: hidden; }
+  .compress-card { background: var(--card); border-radius: var(--radius); padding: 36px; box-shadow: var(--shadow); }
+  .compress-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .compress-header h2 { font-size: 20px; font-weight: 700; }
+  .compress-subtitle { color: var(--text-muted); font-size: 13px; margin-bottom: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .compress-section { border: 1.5px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 14px; }
+  .compress-section-header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; background: var(--bg); }
+  .compress-section-header .sec-badge { font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 20px; flex-shrink: 0; }
+  .badge-recommend { background: var(--success); color: white; }
+  .badge-browser { background: var(--primary); color: white; }
+  .badge-slow { background: #94A3B8; color: white; }
+  .compress-section-header strong { font-size: 15px; }
+  .compress-section-body { padding: 16px; }
+  /* terminal command */
+  .cmd-wrap { background: #0F172A; border-radius: 10px; padding: 14px 16px; position: relative; margin: 8px 0 12px; }
+  .cmd-wrap code { color: #7DD3FC; font-family: 'SF Mono', 'Fira Mono', monospace; font-size: 13px; line-height: 1.6; display: block; white-space: pre-wrap; word-break: break-all; }
+  .btn-copy { position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.12); color: white; border: none; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; transition: background 0.15s; }
+  .btn-copy:hover { background: rgba(255,255,255,0.22); }
+  .cmd-hint { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+  .cmd-hint strong { color: var(--success); }
+  /* drop zone inside compress */
+  .compress-dropzone { border: 2px dashed var(--primary); border-radius: 10px; padding: 20px; text-align: center; margin-top: 12px; background: #F0EFFE; cursor: pointer; transition: all 0.2s; }
+  .compress-dropzone:hover, .compress-dropzone.drag { background: #E0DBFE; }
+  .compress-dropzone p { font-size: 14px; color: var(--primary); font-weight: 600; }
+  .compress-dropzone span { font-size: 12px; color: var(--text-muted); }
+  /* browser compress progress */
+  .compress-progress-wrap { margin: 10px 0; display: none; }
+  .compress-step-msg { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+  .compress-bar-outer { background: var(--bg); border-radius: 99px; height: 8px; overflow: hidden; }
   .compress-bar-inner { height: 100%; background: linear-gradient(90deg, #4F46E5, #7C3AED); border-radius: 99px; transition: width 0.3s; }
-  .compress-size-after { font-size: 13px; color: var(--success); margin-top: 8px; font-weight: 600; display: none; }
-  .compress-actions { display: flex; flex-direction: column; gap: 10px; }
-  .btn-compress-primary { padding: 14px; background: var(--primary); color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+  .compress-size-after { font-size: 13px; color: var(--success); margin-top: 6px; font-weight: 600; display: none; }
+  /* buttons */
+  .btn-compress-primary { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 4px; transition: opacity 0.15s; }
   .btn-compress-primary:hover { opacity: 0.9; }
   .btn-compress-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-compress-secondary { padding: 12px; background: none; color: var(--text-muted); border: 1.5px solid var(--border); border-radius: 10px; font-size: 14px; cursor: pointer; transition: all 0.15s; }
-  .btn-compress-secondary:hover { border-color: var(--text-muted); color: var(--text); }
+  .btn-compress-secondary { width: 100%; padding: 10px; background: none; color: var(--text-muted); border: 1.5px solid var(--border); border-radius: 10px; font-size: 13px; cursor: pointer; margin-top: 8px; }
+  .btn-compress-secondary:hover { border-color: #94A3B8; color: var(--text); }
 
   @media (max-width: 600px) {
     .score-overview { flex-direction: column; align-items: center; text-align: center; }
@@ -216,8 +229,11 @@
       <h2>商談録画をアップロード</h2>
       <p>ファイルをここにドロップするか、クリックして選択</p>
       <div class="hint">
-        対応形式: <span>MP4</span><span>MOV</span><span>M4V</span><span>AVI</span><span>MKV</span>
-        ／ 最大 2GB
+        動画: <span>MP4</span><span>MOV</span><span>M4V</span><span>AVI</span><span>MKV</span>
+        ／ 音声: <span>MP3</span><span>M4A</span><span>WAV</span>
+      </div>
+      <div class="hint" style="margin-top:8px;color:#94A3B8">
+        💡 大きな動画は音声だけ抽出してアップロードすると高速です
       </div>
       <button class="btn-upload" onclick="document.getElementById('file-input').click()">ファイルを選択</button>
       <input type="file" id="file-input" accept=".mp4,.mov,.m4v,.avi,.mkv,video/*">
@@ -227,41 +243,54 @@
   <!-- Compression Page -->
   <div id="page-compress" class="page">
     <div class="compress-card">
-      <h2>⚠️ ファイルが大きすぎます</h2>
+      <div class="compress-header">
+        <span style="font-size:28px">⚠️</span>
+        <h2>ファイルが大きすぎます</h2>
+      </div>
       <div class="compress-subtitle" id="compress-subtitle"></div>
 
-      <div class="compress-warning">
-        <div class="warn-icon">📦</div>
-        <div class="warn-text">
-          <strong id="compress-warn-title"></strong>
-          <span>アップロード前にブラウザ内で音声を抽出すると、大幅に速くなります。</span>
+      <!-- Option 1: Local terminal (always shown, recommended for large files) -->
+      <div class="compress-section">
+        <div class="compress-section-header">
+          <span class="sec-badge badge-recommend" id="local-badge">推奨</span>
+          <strong>🖥️ ターミナルで音声だけ抽出してからアップロード</strong>
+        </div>
+        <div class="compress-section-body">
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px">以下のコマンドをターミナルに貼り付けて実行してください。数秒〜数分で完了します。</p>
+          <div class="cmd-wrap">
+            <code id="cmd-text"></code>
+            <button class="btn-copy" onclick="copyCmd()">コピー</button>
+          </div>
+          <p class="cmd-hint">実行後に作成された <strong id="cmd-outname"></strong> をこの画面にドロップしてください。</p>
+          <div class="compress-dropzone" id="compress-dropzone">
+            <p>📂 MP3をここにドロップ</p>
+            <span>または クリックして選択</span>
+          </div>
         </div>
       </div>
 
-      <div class="compress-option">
-        <div class="opt-icon">🎵</div>
-        <div>
-          <strong>音声のみ抽出 <span class="opt-badge">推奨</span></strong>
-          <div class="opt-desc">ブラウザ内でMP3に変換してからアップロード。<br>約10〜40MBに圧縮されるため大幅に速くなります。</div>
+      <!-- Option 2: Browser ffmpeg.wasm (shown only for <200MB) -->
+      <div class="compress-section" id="browser-compress-section">
+        <div class="compress-section-header">
+          <span class="sec-badge badge-browser">ブラウザで処理</span>
+          <strong>🎵 ブラウザ内で音声を抽出してアップロード</strong>
+        </div>
+        <div class="compress-section-body">
+          <div class="compress-progress-wrap" id="compress-progress-wrap">
+            <div class="compress-step-msg" id="compress-step-msg">準備中...</div>
+            <div class="compress-bar-outer"><div class="compress-bar-inner" id="compress-bar" style="width:0%"></div></div>
+            <div class="compress-size-after" id="compress-size-after"></div>
+          </div>
+          <button class="btn-compress-primary" id="btn-do-compress" onclick="startCompression()">
+            ブラウザで音声を抽出してアップロード
+          </button>
         </div>
       </div>
 
-      <div class="compress-progress-wrap" id="compress-progress-wrap">
-        <div class="compress-step" id="compress-step-msg">ffmpegを読み込み中...</div>
-        <div class="compress-bar-outer">
-          <div class="compress-bar-inner" id="compress-bar" style="width:0%"></div>
-        </div>
-        <div class="compress-size-after" id="compress-size-after"></div>
-      </div>
-
-      <div class="compress-actions" id="compress-actions">
-        <button class="btn-compress-primary" id="btn-do-compress" onclick="startCompression()">
-          🎵 音声を抽出してアップロード
-        </button>
-        <button class="btn-compress-secondary" onclick="uploadFile(currentFile)">
-          そのままアップロード（時間がかかる場合があります）
-        </button>
-      </div>
+      <!-- Option 3: Upload as-is -->
+      <button class="btn-compress-secondary" onclick="uploadFile(currentFile)">
+        そのままアップロード（長時間かかる場合があります）
+      </button>
     </div>
   </div>
 
@@ -351,7 +380,8 @@
 </main>
 
 <script>
-const COMPRESS_THRESHOLD = 300 * 1024 * 1024; // 300MB
+const DIRECT_UPLOAD_LIMIT = 50 * 1024 * 1024;   // 50MB: そのままアップロード
+const BROWSER_COMPRESS_LIMIT = 200 * 1024 * 1024; // 200MB: ブラウザ処理を表示
 let currentFile = null;
 let ffmpegInstance = null;
 
@@ -359,6 +389,38 @@ function formatSize(bytes) {
   if (bytes >= 1024 ** 3) return (bytes / 1024 ** 3).toFixed(1) + ' GB';
   if (bytes >= 1024 ** 2) return (bytes / 1024 ** 2).toFixed(0) + ' MB';
   return (bytes / 1024).toFixed(0) + ' KB';
+}
+
+function copyCmd() {
+  const text = document.getElementById('cmd-text').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.btn-copy');
+    btn.textContent = 'コピー済 ✓';
+    setTimeout(() => btn.textContent = 'コピー', 2000);
+  });
+}
+
+function showCompressPanel(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const outName = file.name.replace(/\.[^.]+$/, '') + '.mp3';
+  const isHuge = file.size > BROWSER_COMPRESS_LIMIT;
+
+  document.getElementById('compress-subtitle').textContent = `${file.name}（${formatSize(file.size)}）`;
+  document.getElementById('cmd-text').textContent =
+    `ffmpeg -i "${file.name}" -vn -ar 16000 -ac 1 -b:a 32k "${outName}"`;
+  document.getElementById('cmd-outname').textContent = outName;
+
+  // 200MB超はブラウザ処理を非表示にして「推奨」バッジをローカルに
+  document.getElementById('browser-compress-section').style.display = isHuge ? 'none' : 'block';
+  document.getElementById('local-badge').textContent = '推奨';
+
+  // リセット
+  document.getElementById('compress-progress-wrap').style.display = 'none';
+  document.getElementById('compress-size-after').style.display = 'none';
+  document.getElementById('compress-bar').style.width = '0%';
+  document.getElementById('btn-do-compress').disabled = false;
+
+  showPage('compress');
 }
 
 async function loadFFmpeg() {
@@ -455,29 +517,16 @@ function handleFile(file) {
   const ext = file.name.split('.').pop().toLowerCase();
   const isAudio = ['mp3', 'm4a', 'wav', 'aac'].includes(ext);
   if (!['mp4','mov','m4v','avi','mkv','mp3','m4a','wav','aac'].includes(ext)) {
-    alert('対応していないファイル形式です。MP4, MOV, M4V, AVI, MKVをアップロードしてください。');
-    return;
-  }
-  if (file.size > 2 * 1024 * 1024 * 1024) {
-    alert('ファイルサイズが2GBを超えています。圧縮機能をご利用ください。');
+    alert('対応していないファイル形式です。\n動画: MP4, MOV, M4V, AVI, MKV\n音声: MP3, M4A, WAV, AAC');
     return;
   }
   currentFile = file;
 
-  if (!isAudio && file.size > COMPRESS_THRESHOLD) {
-    // 大きなファイル → 圧縮パネルへ
-    document.getElementById('compress-subtitle').textContent = `${file.name}（${formatSize(file.size)}）`;
-    document.getElementById('compress-warn-title').textContent =
-      `このファイルは ${formatSize(file.size)} あります。アップロードに時間がかかる可能性があります。`;
-    // リセット
-    document.getElementById('compress-progress-wrap').style.display = 'none';
-    document.getElementById('compress-size-after').style.display = 'none';
-    document.getElementById('compress-bar').style.width = '0%';
-    document.getElementById('btn-do-compress').disabled = false;
-    document.getElementById('compress-actions').style.display = 'flex';
-    showPage('compress');
-  } else {
+  // 音声ファイル or 50MB以下 → そのままアップロード
+  if (isAudio || file.size <= DIRECT_UPLOAD_LIMIT) {
     uploadFile(file);
+  } else {
+    showCompressPanel(file);
   }
 }
 
@@ -689,6 +738,24 @@ function toggleAccordion(header) {
   const body = header.nextElementSibling;
   body.classList.toggle('open');
 }
+
+// Compression panel drop zone
+const compressDropzone = document.getElementById('compress-dropzone');
+compressDropzone.addEventListener('dragover', e => { e.preventDefault(); compressDropzone.classList.add('drag'); });
+compressDropzone.addEventListener('dragleave', () => compressDropzone.classList.remove('drag'));
+compressDropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  compressDropzone.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+compressDropzone.addEventListener('click', () => {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.mp3,.m4a,.wav,.aac,audio/*';
+  inp.onchange = e => { if (e.target.files[0]) handleFile(e.target.files[0]); };
+  inp.click();
+});
 
 // Tab switching
 document.querySelectorAll('.tab-btn').forEach(btn => {
