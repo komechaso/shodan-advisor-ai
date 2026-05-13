@@ -202,7 +202,6 @@ def analyze_transcript(transcript_text: str, file_name: str) -> dict:
     response = client.messages.create(
         model=MODEL,
         max_tokens=4096,
-        thinking={"type": "adaptive"},
         system=[{
             "type": "text",
             "text": SYSTEM_PROMPT,
