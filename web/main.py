@@ -38,7 +38,13 @@ def _push(job_id: str, event: dict) -> None:
 def _process(job_id: str, file_path: str, file_name: str) -> None:
     """バックグラウンドスレッドで録画を処理する"""
     try:
-        _push(job_id, {"type": "progress", "step": 2, "pct": 10, "message": "音声を抽出中..."})
+        ext = Path(file_name).suffix.lower()
+        is_audio = ext in {".mp3", ".m4a", ".wav", ".aac", ".ogg", ".flac"}
+
+        if is_audio:
+            _push(job_id, {"type": "progress", "step": 2, "pct": 20, "message": "音声ファイルを確認中..."})
+        else:
+            _push(job_id, {"type": "progress", "step": 2, "pct": 10, "message": "音声を抽出中..."})
 
         transcriber = Transcriber()
         file_id = f"web_{job_id}"
@@ -65,10 +71,9 @@ async def index():
 
 @app.post("/api/analyze")
 async def start_analysis(file: UploadFile = File(...)):
-    if file.content_type and not any(
-        file.content_type.startswith(t) for t in ["video/", "application/octet-stream"]
-    ):
-        raise HTTPException(400, "動画ファイルをアップロードしてください")
+    allowed_types = ["video/", "audio/", "application/octet-stream"]
+    if file.content_type and not any(file.content_type.startswith(t) for t in allowed_types):
+        raise HTTPException(400, "対応していないファイル形式です（動画・音声ファイルをアップロードしてください）")
 
     job_id = str(uuid.uuid4())
     _jobs[job_id] = {"events": [], "done": False}

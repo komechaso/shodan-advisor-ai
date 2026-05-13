@@ -116,16 +116,29 @@ class Transcriber:
             print(f"  キャッシュ使用: {file_name}")
             return cached
 
-        print(f"  音声抽出中: {file_name}")
-        with tempfile.TemporaryDirectory() as tmpdir:
-            audio_path = Path(tmpdir) / "audio.mp3"
-            self._extract_audio(video_path, audio_path)
-            size_mb = audio_path.stat().st_size / (1024 * 1024)
-            print(f"  文字起こし中: {size_mb:.1f}MB → Whisper API")
-            chunks = self._split_audio(audio_path)
+        audio_extensions = {".mp3", ".m4a", ".wav", ".aac", ".ogg", ".flac"}
+        is_audio = video_path.suffix.lower() in audio_extensions
+
+        if is_audio:
+            # 音声ファイルはそのまま使用（ffmpeg不要）
+            print(f"  文字起こし中: {file_name}")
+            size_mb = video_path.stat().st_size / (1024 * 1024)
+            print(f"  {size_mb:.1f}MB → Whisper API")
+            chunks = self._split_audio(video_path)
             if len(chunks) > 1:
                 print(f"  ({len(chunks)}分割して処理)")
-            text = self._transcribe_chunks(chunks, audio_path)
+            text = self._transcribe_chunks(chunks, video_path)
+        else:
+            print(f"  音声抽出中: {file_name}")
+            with tempfile.TemporaryDirectory() as tmpdir:
+                audio_path = Path(tmpdir) / "audio.mp3"
+                self._extract_audio(video_path, audio_path)
+                size_mb = audio_path.stat().st_size / (1024 * 1024)
+                print(f"  文字起こし中: {size_mb:.1f}MB → Whisper API")
+                chunks = self._split_audio(audio_path)
+                if len(chunks) > 1:
+                    print(f"  ({len(chunks)}分割して処理)")
+                text = self._transcribe_chunks(chunks, audio_path)
 
         result = {
             "file_id": file_id,
