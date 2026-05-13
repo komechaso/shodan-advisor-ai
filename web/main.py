@@ -137,6 +137,20 @@ async def stream_status(job_id: str):
     )
 
 
+import re as _re
+
+def _drive_to_download_url(url: str) -> str:
+    """Extract file ID and return canonical gdown-compatible URL."""
+    for pattern in [r'/file/d/([a-zA-Z0-9_-]+)', r'[?&]id=([a-zA-Z0-9_-]+)']:
+        m = _re.search(pattern, url)
+        if m:
+            return f"https://drive.google.com/uc?id={m.group(1)}"
+    raise RuntimeError(
+        "URLからファイルIDを取得できませんでした。\n"
+        "Google Driveの「共有」→「リンクをコピー」で取得したURLを貼り付けてください。"
+    )
+
+
 def _download_and_process(job_id: str, drive_url: str) -> None:
     """Download from Google Drive then run the normal analysis pipeline."""
     tmpdir = tempfile.mkdtemp()
@@ -144,7 +158,8 @@ def _download_and_process(job_id: str, drive_url: str) -> None:
         _push(job_id, {"type": "progress", "step": 1, "pct": 5,
                        "message": "Google Driveからダウンロード中（大容量ファイルは数分〜数十分かかります）..."})
         import gdown
-        result = gdown.download(drive_url, tmpdir + "/", quiet=True, fuzzy=True)
+        download_url = _drive_to_download_url(drive_url)
+        result = gdown.download(download_url, tmpdir + "/", quiet=True)
 
         if not result or not Path(result).exists():
             raise RuntimeError(
