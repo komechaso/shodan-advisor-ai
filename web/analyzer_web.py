@@ -46,7 +46,9 @@ SYSTEM_PROMPT = """あなたは日本のBtoB/BtoC営業に精通した、トッ�
 
 ## スコアリングの注意事項
 - 文字起こしの質（音声認識の精度）を考慮して採点する
-- 発言が確認できない項目は中間点（5点）を基本とする
+- 発言が確認できない項目は必ず中間点（5点）を付け、commentには「音声から確認できなかったため中間点」と記載する
+- 「測定不可」「評価不能」「判断不可」などの表現は絶対に使わない。必ず0〜10の整数スコアを付ける
+- 文字起こしが短い・不明瞭な場合も、確認できた範囲で評価し、不明な項目は5点とする
 - 全体スコアは単純平均ではなく商談全体の質を総合評価する
   （ヒアリング25%・クロージング20%・反論処理20%・提案力20%・ラポール10%・コミュニケーション5%の重み）"""
 
@@ -201,7 +203,7 @@ def analyze_transcript(transcript_text: str, file_name: str) -> dict:
 
     response = client.messages.create(
         model=MODEL,
-        max_tokens=4096,
+        max_tokens=8192,
         system=[{
             "type": "text",
             "text": SYSTEM_PROMPT,
@@ -223,4 +225,14 @@ def analyze_transcript(transcript_text: str, file_name: str) -> dict:
         if block.type == "tool_use" and block.name == "submit_analysis":
             return block.input
 
-    raise RuntimeError("分析結果を取得できませんでした")
+    # If the model didn't call the tool (e.g. stop_reason=max_tokens), surface a clear error
+    stop = getattr(response, "stop_reason", "unknown")
+    if stop == "max_tokens":
+        raise RuntimeError(
+            "文字起こしが長すぎてAI分析がタイムアウトしました。\n"
+            "録音が長い場合は前半・後半に分けてアップロードしてみてください。"
+        )
+    raise RuntimeError(
+        f"AI分析結果を取得できませんでした（stop_reason={stop}）。\n"
+        "しばらく待ってから再試行してください。"
+    )
