@@ -10,7 +10,7 @@ from pathlib import Path
 from openai import OpenAI
 
 CACHE_DIR = Path("cache/transcripts")
-WHISPER_SIZE_LIMIT = 24 * 1024 * 1024  # 24MB (Whisper limit is 25MB)
+WHISPER_SIZE_LIMIT = 20 * 1024 * 1024  # 20MB safety margin (Whisper limit is 25MB)
 
 
 FFMPEG_TIMEOUT = 600  # 10分でタイムアウト
@@ -89,7 +89,7 @@ class Transcriber:
                 "-i", str(audio_path),
                 "-ss", f"{start:.3f}",
                 "-t", f"{chunk_duration:.3f}",
-                "-ar", "16000", "-ac", "1", "-b:a", "64k",
+                "-ar", "16000", "-ac", "1", "-b:a", "32k",
                 str(chunk_path),
             )
             chunks.append(chunk_path)
