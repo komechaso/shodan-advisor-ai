@@ -262,6 +262,9 @@ def _download_and_process(job_id: str, drive_url: str) -> None:
                 f"詳細: {result.stderr[-300:]}"
             )
 
+        # 動画ファイルはもう不要なので削除してディスク容量を確保
+        video_path.unlink(missing_ok=True)
+
         if not audio_path.exists() or audio_path.stat().st_size == 0:
             raise RuntimeError("音声ファイルの作成に失敗しました。")
 
