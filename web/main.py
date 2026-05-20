@@ -161,63 +161,53 @@ def _extract_drive_file_id(url: str) -> str:
 
 
 def _download_drive_file(drive_url: str, dest_path: Path) -> None:
-    """Download a Google Drive file. Tries multiple URL formats in order."""
-    import requests
+    """Download a Google Drive file using yt-dlp (handles cloud IP restrictions)."""
+    import yt_dlp
 
-    file_id = _extract_drive_file_id(drive_url)
+    # Output template: dest_path without extension + yt-dlp extension placeholder
+    # yt-dlp will create e.g. video.mp4; we rename it to dest_path afterwards
+    outtmpl = str(dest_path.with_suffix("")) + ".%(ext)s"
 
-    # Try these download URL patterns in order
-    candidate_urls = [
-        f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t",
-        f"https://drive.google.com/uc?id={file_id}&export=download&confirm=t",
-        f"https://docs.google.com/uc?id={file_id}&export=download&confirm=t",
-    ]
+    ydl_opts = {
+        "outtmpl": outtmpl,
+        "merge_output_format": "mp4",
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0 Safari/537.36"
+            ),
+        },
+    }
 
-    session = requests.Session()
-    session.headers.update({"User-Agent": "Mozilla/5.0"})
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([drive_url])
+    except Exception as e:
+        raise RuntimeError(
+            f"Google Driveのダウンロードに失敗しました。\n"
+            f"ファイルの共有設定を「リンクを知っている全員が閲覧可」にして、\n"
+            f"共有リンクをそのまま貼り付けてください。\n"
+            f"詳細: {str(e)[:300]}"
+        )
 
-    last_error = ""
-    for url in candidate_urls:
-        try:
-            resp = session.get(url, stream=True, timeout=60, allow_redirects=True)
-            resp.raise_for_status()
-        except requests.RequestException as e:
-            last_error = str(e)
-            continue
+    # Locate what yt-dlp actually saved (extension may differ from .mp4)
+    downloaded: Path | None = None
+    stem = dest_path.stem
+    for candidate in sorted(dest_path.parent.glob(f"{stem}.*"),
+                            key=lambda p: p.stat().st_size, reverse=True):
+        if candidate.stat().st_size > 0:
+            downloaded = candidate
+            break
 
-        content_type = resp.headers.get("Content-Type", "")
-        if "text/html" in content_type:
-            # Google returned an auth/confirm page — try next URL
-            last_error = f"HTMLページが返されました（{url}）"
-            resp.close()
-            continue
+    if downloaded is None:
+        raise RuntimeError("yt-dlpがファイルを保存しませんでした。ダウンロードに失敗した可能性があります。")
 
-        # Got a non-HTML response — stream to disk
-        with open(dest_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=4 * 1024 * 1024):
-                if chunk:
-                    f.write(chunk)
-
-        if not dest_path.exists() or dest_path.stat().st_size == 0:
-            dest_path.unlink(missing_ok=True)
-            last_error = "ダウンロードファイルが空でした"
-            continue
-
-        # Final guard: confirm the file is not secretly an HTML page
-        with open(dest_path, "rb") as f:
-            header = f.read(512).lower()
-        if b"<!doctype" in header or b"<html" in header:
-            dest_path.unlink(missing_ok=True)
-            last_error = "ファイルの代わりにHTMLページが保存されました"
-            continue
-
-        return  # success
-
-    raise RuntimeError(
-        "Google Driveからのダウンロードに失敗しました。\n"
-        "ファイルの共有設定を「リンクを知っている全員が閲覧可」にしてください。\n"
-        f"（試みたURL全てで失敗: {last_error}）"
-    )
+    if downloaded != dest_path:
+        downloaded.rename(dest_path)
 
 
 def _download_and_process(job_id: str, drive_url: str) -> None:
