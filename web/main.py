@@ -135,9 +135,10 @@ async def stream_status(job_id: str):
                 break
 
             ticks += 1
-            # Keepalive comment every ~15s to prevent Render proxy timeout
+            # Keepalive data event every ~15s to prevent Render proxy timeout
+            # Use data event (not SSE comment) so Render's proxy resets its idle timer
             if ticks % 37 == 0:
-                yield ": ping\n\n"
+                yield 'data: {"type":"ping"}\n\n'
 
             await asyncio.sleep(0.4)
 
@@ -206,7 +207,23 @@ def _download_and_process(job_id: str, drive_url: str) -> None:
                        "message": "Google Driveからダウンロード中（大容量ファイルは数十分かかる場合があります）..."})
 
         video_path = Path(tmpdir) / "video.mp4"
-        _download_drive_file(drive_url, video_path)
+
+        # Monitor download progress and push events every 15s so the SSE
+        # connection stays alive during long downloads (Render proxy timeout)
+        stop_monitor = threading.Event()
+        def _monitor_download():
+            while not stop_monitor.wait(15):
+                if video_path.exists():
+                    size_mb = video_path.stat().st_size / (1024 * 1024)
+                    _push(job_id, {"type": "progress", "step": 2, "pct": 5,
+                                   "message": f"Google Driveからダウンロード中... {size_mb:.0f}MB 取得済み"})
+        monitor = threading.Thread(target=_monitor_download, daemon=True)
+        monitor.start()
+        try:
+            _download_drive_file(drive_url, video_path)
+        finally:
+            stop_monitor.set()
+            monitor.join(timeout=2)
 
         size_mb = video_path.stat().st_size / (1024 * 1024)
         _push(job_id, {"type": "progress", "step": 2, "pct": 20,
