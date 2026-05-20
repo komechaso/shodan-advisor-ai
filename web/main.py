@@ -160,54 +160,22 @@ def _extract_drive_file_id(url: str) -> str:
 
 
 def _download_drive_file(file_id: str, dest_path: Path) -> None:
-    """Download a Google Drive file using requests (handles cookies/redirects reliably)."""
-    import requests
+    """Download a Google Drive file using gdown (purpose-built for Drive downloads)."""
+    import gdown
 
-    session = requests.Session()
-    session.headers.update({"User-Agent": "Mozilla/5.0"})
-
-    url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t&authuser=0"
-    response = session.get(url, stream=True, timeout=60, allow_redirects=True)
-
-    # If we got an HTML page, it's likely a confirmation or auth wall
-    content_type = response.headers.get("Content-Type", "")
-    if "text/html" in content_type:
-        html = response.text
-        confirm_match = _re.search(r'confirm=([0-9A-Za-z_-]+)', html)
-        uuid_match = _re.search(r'[?&]uuid=([0-9A-Za-z_-]+)', html)
-
-        if confirm_match:
-            confirm_url = (
-                f"https://drive.usercontent.google.com/download"
-                f"?id={file_id}&export=download&confirm={confirm_match.group(1)}"
-            )
-            if uuid_match:
-                confirm_url += f"&uuid={uuid_match.group(1)}"
-            response = session.get(confirm_url, stream=True, timeout=60, allow_redirects=True)
-        else:
-            raise RuntimeError(
-                "Google Driveへのアクセスが拒否されました。\n"
-                "ファイルの共有設定を「リンクを知っている全員が閲覧可」に変更してください。"
-            )
-
-    response.raise_for_status()
-
-    with open(dest_path, "wb") as f:
-        for chunk in response.iter_content(chunk_size=4 * 1024 * 1024):
-            f.write(chunk)
+    url = f"https://drive.google.com/uc?id={file_id}"
+    try:
+        gdown.download(url, str(dest_path), quiet=True, fuzzy=True)
+    except Exception as e:
+        raise RuntimeError(
+            f"Google Driveからのダウンロードに失敗しました。\n"
+            f"ファイルの共有設定を「リンクを知っている全員が閲覧可」に変更してください。\n"
+            f"詳細: {e}"
+        )
 
     if not dest_path.exists() or dest_path.stat().st_size == 0:
         raise RuntimeError(
             "ダウンロードしたファイルが空です。\n"
-            "ファイルの共有設定を「リンクを知っている全員が閲覧可」に変更してください。"
-        )
-
-    # Detect HTML response saved as file (auth wall)
-    with open(dest_path, "rb") as f:
-        header = f.read(512)
-    if b"<!DOCTYPE" in header or b"<html" in header:
-        raise RuntimeError(
-            "Google DriveがHTMLページを返しました。\n"
             "ファイルの共有設定を「リンクを知っている全員が閲覧可」に変更してください。"
         )
 
