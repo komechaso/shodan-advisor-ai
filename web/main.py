@@ -163,8 +163,10 @@ def _download_drive_file(drive_url: str, dest_path: Path) -> None:
     """Download a Google Drive file using gdown (purpose-built for Drive downloads)."""
     import gdown
 
+    file_id = _extract_drive_file_id(drive_url)
+    uc_url = f"https://drive.google.com/uc?id={file_id}"
     try:
-        result = gdown.download(drive_url, str(dest_path), quiet=False, fuzzy=True)
+        result = gdown.download(uc_url, str(dest_path), quiet=False)
     except Exception as e:
         raise RuntimeError(
             f"Google Driveからのダウンロードに失敗しました。\n"
