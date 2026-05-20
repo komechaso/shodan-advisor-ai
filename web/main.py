@@ -161,41 +161,57 @@ def _extract_drive_file_id(url: str) -> str:
 
 
 def _download_drive_file(drive_url: str, dest_path: Path) -> None:
-    """Download a Google Drive file using gdown (purpose-built for Drive downloads)."""
-    import gdown
+    """Download a Google Drive file via drive.usercontent.google.com (public files only)."""
+    import requests
 
     file_id = _extract_drive_file_id(drive_url)
-    uc_url = f"https://drive.google.com/uc?id={file_id}"
+    download_url = (
+        f"https://drive.usercontent.google.com/download"
+        f"?id={file_id}&export=download&authuser=0&confirm=t"
+    )
+
     try:
-        result = gdown.download(uc_url, str(dest_path), quiet=False)
-    except Exception as e:
+        resp = requests.get(
+            download_url,
+            headers={"User-Agent": "Mozilla/5.0"},
+            stream=True,
+            timeout=60,
+        )
+        resp.raise_for_status()
+    except requests.RequestException as e:
         raise RuntimeError(
             f"Google Driveからのダウンロードに失敗しました。\n"
-            f"ファイルの共有設定を「リンクを知っている全員が閲覧可・編集可」にしてください。\n"
+            f"ファイルの共有設定を「リンクを知っている全員が閲覧可」にしてください。\n"
             f"詳細: {e}"
         )
 
-    # gdown returns None (no exception) when download fails
-    if result is None:
+    # Detect HTML auth/error page returned instead of the file
+    content_type = resp.headers.get("Content-Type", "")
+    if "text/html" in content_type:
         raise RuntimeError(
-            "Google Driveからのダウンロードに失敗しました。\n"
-            "ファイルの共有設定を「リンクを知っている全員が閲覧可・編集可」にしてください。"
+            "Google DriveがHTMLページを返しました。アクセス権限がありません。\n"
+            "ファイルの共有設定を「リンクを知っている全員が閲覧可」にしてください。"
         )
+
+    with open(dest_path, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=8 * 1024 * 1024):
+            if chunk:
+                f.write(chunk)
 
     if not dest_path.exists() or dest_path.stat().st_size == 0:
         raise RuntimeError(
             "ダウンロードしたファイルが空です。\n"
-            "ファイルの共有設定を「リンクを知っている全員が閲覧可・編集可」にしてください。"
+            "ファイルの共有設定を「リンクを知っている全員が閲覧可」にしてください。"
         )
 
-    # Guard against Google returning an HTML auth page instead of the file
+    # Guard against HTML page saved as file (e.g. login redirect)
     with open(dest_path, "rb") as f:
         header = f.read(512).lower()
     if b"<!doctype" in header or b"<html" in header:
         dest_path.unlink(missing_ok=True)
         raise RuntimeError(
             "Google DriveがHTMLページを返しました。アクセス権限がありません。\n"
-            "ファイルの共有設定を「リンクを知っている全員が閲覧可・編集可」にしてください。"
+            "ファイルの共有設定を「リンクを知っている全員が閲覧可」にしてください。"
         )
 
 
@@ -262,25 +278,23 @@ def _download_and_process(job_id: str, drive_url: str) -> None:
 @app.get("/api/test-drive")
 async def test_drive_url(url: str):
     """Diagnostic: test if a Google Drive URL is downloadable."""
-    import urllib.error
+    import requests
     try:
         file_id = _extract_drive_file_id(url)
-        req = _urllib_request.Request(
+        resp = requests.head(
             f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t",
             headers={"User-Agent": "Mozilla/5.0"},
+            timeout=15,
+            allow_redirects=True,
         )
-        resp = _urllib_request.urlopen(req, timeout=15)
-        info = {
-            "ok": True,
+        return {
+            "ok": resp.status_code == 200,
             "file_id": file_id,
+            "status_code": resp.status_code,
             "content_type": resp.headers.get("Content-Type", ""),
             "content_disposition": resp.headers.get("Content-Disposition", ""),
             "content_length": resp.headers.get("Content-Length", "unknown"),
         }
-        resp.close()
-        return info
-    except urllib.error.HTTPError as e:
-        return {"ok": False, "file_id": _extract_drive_file_id(url), "http_error": e.code}
     except Exception as e:
         return {"ok": False, "error": str(e), "type": type(e).__name__}
 
