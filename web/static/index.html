@@ -703,12 +703,26 @@ function streamProgress(jobId) {
     }
   };
 
-  es.onerror = () => {
+  es.onerror = async () => {
     if (finished) return; // normal close after done/error — ignore
     es.close();
-    showError('サーバーとの接続が切れました。\n' +
-      '・Google Driveの場合: ファイルが「リンクを知っている全員が閲覧可」になっているか確認してください\n' +
-      '・ファイルアップロードの場合: ページを再読み込みして再試行してください');
+
+    // SSE切れ時はポーリングでサーバーの実際のエラー内容を取得する
+    for (let i = 0; i < 8; i++) {
+      await new Promise(r => setTimeout(r, 1500));
+      try {
+        const resp = await fetch('/api/status/' + jobId);
+        if (!resp.ok) break;
+        const status = await resp.json();
+        if (!status.exists) break; // サーバー再起動でジョブが消えた
+        if (status.error)  { finished = true; showError(status.error); return; }
+        if (status.result) { finished = true; renderResult(status.result); return; }
+        if (!status.done)  continue; // まだ処理中
+        break;
+      } catch (_) { break; }
+    }
+
+    showError('サーバーとの接続が切れました。\nページを再読み込みして再試行してください。');
   };
 }
 

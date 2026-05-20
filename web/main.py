@@ -161,58 +161,63 @@ def _extract_drive_file_id(url: str) -> str:
 
 
 def _download_drive_file(drive_url: str, dest_path: Path) -> None:
-    """Download a Google Drive file via drive.usercontent.google.com (public files only)."""
+    """Download a Google Drive file. Tries multiple URL formats in order."""
     import requests
 
     file_id = _extract_drive_file_id(drive_url)
-    download_url = (
-        f"https://drive.usercontent.google.com/download"
-        f"?id={file_id}&export=download&authuser=0&confirm=t"
+
+    # Try these download URL patterns in order
+    candidate_urls = [
+        f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t",
+        f"https://drive.google.com/uc?id={file_id}&export=download&confirm=t",
+        f"https://docs.google.com/uc?id={file_id}&export=download&confirm=t",
+    ]
+
+    session = requests.Session()
+    session.headers.update({"User-Agent": "Mozilla/5.0"})
+
+    last_error = ""
+    for url in candidate_urls:
+        try:
+            resp = session.get(url, stream=True, timeout=60, allow_redirects=True)
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            last_error = str(e)
+            continue
+
+        content_type = resp.headers.get("Content-Type", "")
+        if "text/html" in content_type:
+            # Google returned an auth/confirm page — try next URL
+            last_error = f"HTMLページが返されました（{url}）"
+            resp.close()
+            continue
+
+        # Got a non-HTML response — stream to disk
+        with open(dest_path, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=4 * 1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+
+        if not dest_path.exists() or dest_path.stat().st_size == 0:
+            dest_path.unlink(missing_ok=True)
+            last_error = "ダウンロードファイルが空でした"
+            continue
+
+        # Final guard: confirm the file is not secretly an HTML page
+        with open(dest_path, "rb") as f:
+            header = f.read(512).lower()
+        if b"<!doctype" in header or b"<html" in header:
+            dest_path.unlink(missing_ok=True)
+            last_error = "ファイルの代わりにHTMLページが保存されました"
+            continue
+
+        return  # success
+
+    raise RuntimeError(
+        "Google Driveからのダウンロードに失敗しました。\n"
+        "ファイルの共有設定を「リンクを知っている全員が閲覧可」にしてください。\n"
+        f"（試みたURL全てで失敗: {last_error}）"
     )
-
-    try:
-        resp = requests.get(
-            download_url,
-            headers={"User-Agent": "Mozilla/5.0"},
-            stream=True,
-            timeout=60,
-        )
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        raise RuntimeError(
-            f"Google Driveからのダウンロードに失敗しました。\n"
-            f"ファイルの共有設定を「リンクを知っている全員が閲覧可」にしてください。\n"
-            f"詳細: {e}"
-        )
-
-    # Detect HTML auth/error page returned instead of the file
-    content_type = resp.headers.get("Content-Type", "")
-    if "text/html" in content_type:
-        raise RuntimeError(
-            "Google DriveがHTMLページを返しました。アクセス権限がありません。\n"
-            "ファイルの共有設定を「リンクを知っている全員が閲覧可」にしてください。"
-        )
-
-    with open(dest_path, "wb") as f:
-        for chunk in resp.iter_content(chunk_size=8 * 1024 * 1024):
-            if chunk:
-                f.write(chunk)
-
-    if not dest_path.exists() or dest_path.stat().st_size == 0:
-        raise RuntimeError(
-            "ダウンロードしたファイルが空です。\n"
-            "ファイルの共有設定を「リンクを知っている全員が閲覧可」にしてください。"
-        )
-
-    # Guard against HTML page saved as file (e.g. login redirect)
-    with open(dest_path, "rb") as f:
-        header = f.read(512).lower()
-    if b"<!doctype" in header or b"<html" in header:
-        dest_path.unlink(missing_ok=True)
-        raise RuntimeError(
-            "Google DriveがHTMLページを返しました。アクセス権限がありません。\n"
-            "ファイルの共有設定を「リンクを知っている全員が閲覧可」にしてください。"
-        )
 
 
 def _download_and_process(job_id: str, drive_url: str) -> None:
@@ -276,6 +281,23 @@ def _download_and_process(job_id: str, drive_url: str) -> None:
         _push(job_id, {"type": "error", "message": str(exc)[:800]})
         _jobs[job_id]["done"] = True
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@app.get("/api/status/{job_id}")
+async def get_job_status(job_id: str):
+    """SSE接続が切れた場合のフォールバック用ステータス取得エンドポイント"""
+    job = _jobs.get(job_id)
+    if not job:
+        return {"exists": False}
+    events = job.get("events", [])
+    error_events = [e for e in events if e.get("type") == "error"]
+    done_events  = [e for e in events if e.get("type") == "done"]
+    return {
+        "exists": True,
+        "done":   job["done"],
+        "error":  error_events[-1]["message"] if error_events else None,
+        "result": done_events[-1]["result"]   if done_events  else None,
+    }
 
 
 @app.get("/api/test-drive")
