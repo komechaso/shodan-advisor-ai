@@ -164,7 +164,7 @@ def _download_drive_file(drive_url: str, dest_path: Path) -> None:
     import gdown
 
     try:
-        gdown.download(drive_url, str(dest_path), quiet=True, fuzzy=True)
+        result = gdown.download(drive_url, str(dest_path), quiet=False, fuzzy=True)
     except Exception as e:
         raise RuntimeError(
             f"Google Driveからのダウンロードに失敗しました。\n"
@@ -172,9 +172,26 @@ def _download_drive_file(drive_url: str, dest_path: Path) -> None:
             f"詳細: {e}"
         )
 
+    # gdown returns None (no exception) when download fails
+    if result is None:
+        raise RuntimeError(
+            "Google Driveからのダウンロードに失敗しました。\n"
+            "ファイルの共有設定を「リンクを知っている全員が閲覧可・編集可」にしてください。"
+        )
+
     if not dest_path.exists() or dest_path.stat().st_size == 0:
         raise RuntimeError(
             "ダウンロードしたファイルが空です。\n"
+            "ファイルの共有設定を「リンクを知っている全員が閲覧可・編集可」にしてください。"
+        )
+
+    # Guard against Google returning an HTML auth page instead of the file
+    with open(dest_path, "rb") as f:
+        header = f.read(512).lower()
+    if b"<!doctype" in header or b"<html" in header:
+        dest_path.unlink(missing_ok=True)
+        raise RuntimeError(
+            "Google DriveがHTMLページを返しました。アクセス権限がありません。\n"
             "ファイルの共有設定を「リンクを知っている全員が閲覧可・編集可」にしてください。"
         )
 
