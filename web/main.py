@@ -160,55 +160,42 @@ def _extract_drive_file_id(url: str) -> str:
 
 
 def _download_drive_file(file_id: str, dest_path: Path) -> None:
-    """Download a Google Drive file to disk, handling large-file confirmation pages."""
-    import urllib.request
-    import urllib.parse
-    import http.cookiejar
+    """Download a Google Drive file using curl (handles cookies/redirects reliably)."""
+    cookie_file = str(dest_path.parent / "cookies.txt")
+    url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t&authuser=0"
 
-    cookie_jar = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+    result = subprocess.run(
+        [
+            "curl", "-L",
+            "-c", cookie_file,
+            "-b", cookie_file,
+            "-A", "Mozilla/5.0",
+            "--retry", "3",
+            "--retry-delay", "2",
+            "-o", str(dest_path),
+            url,
+        ],
+        capture_output=True, text=True, timeout=7200,
+    )
 
-    base_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-    req = urllib.request.Request(base_url, headers={"User-Agent": "Mozilla/5.0"})
-    response = opener.open(req, timeout=60)
-    content_type = response.headers.get("Content-Type", "")
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Google Driveからのダウンロードに失敗しました。\n"
+            f"詳細: {result.stderr[-300:]}"
+        )
 
-    if "text/html" in content_type:
-        html = response.read().decode("utf-8", errors="replace")
-        response.close()
-
-        confirm_match = _re.search(r'confirm=([0-9A-Za-z_-]+)', html)
-        uuid_match = _re.search(r'[?&]uuid=([0-9A-Za-z_-]+)', html)
-
-        if confirm_match:
-            confirm_url = f"https://drive.google.com/uc?export=download&confirm={confirm_match.group(1)}&id={file_id}"
-            if uuid_match:
-                confirm_url += f"&uuid={uuid_match.group(1)}"
-            req2 = urllib.request.Request(confirm_url, headers={"User-Agent": "Mozilla/5.0"})
-            response = opener.open(req2, timeout=60)
-        else:
-            action_match = _re.search(r'action="([^"]+)"', html)
-            if not action_match:
-                raise RuntimeError(
-                    "Google Driveの確認ページを解析できませんでした。\n"
-                    "ファイルの共有設定を「リンクを知っている全員が閲覧可」に変更してください。"
-                )
-            action_url = action_match.group(1).replace("&amp;", "&")
-            req2 = urllib.request.Request(action_url, headers={"User-Agent": "Mozilla/5.0"})
-            response = opener.open(req2, timeout=60)
-
-    with open(dest_path, "wb") as f:
-        while True:
-            chunk = response.read(4 * 1024 * 1024)
-            if not chunk:
-                break
-            f.write(chunk)
-    response.close()
-
-    if dest_path.stat().st_size == 0:
+    if not dest_path.exists() or dest_path.stat().st_size == 0:
         raise RuntimeError(
             "ダウンロードしたファイルが空です。\n"
             "ファイルの共有設定を「リンクを知っている全員が閲覧可」に変更してください。"
+        )
+
+    # If curl downloaded an HTML page (e.g. auth wall), detect and fail early
+    with open(dest_path, "rb") as f:
+        header = f.read(512)
+    if b"<!DOCTYPE" in header or b"<html" in header:
+        raise RuntimeError(
+            "Google DriveがHTMLページを返しました。アクセス権限がないか、共有設定が「リンクを知っている全員が閲覧可」になっていない可能性があります。"
         )
 
 
