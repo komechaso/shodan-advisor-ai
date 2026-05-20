@@ -159,27 +159,80 @@ def _extract_drive_file_id(url: str) -> str:
     )
 
 
+def _download_drive_file(file_id: str, dest_path: Path) -> None:
+    """Download a Google Drive file to disk, handling large-file confirmation pages."""
+    import urllib.request
+    import urllib.parse
+    import http.cookiejar
+
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+
+    base_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    req = urllib.request.Request(base_url, headers={"User-Agent": "Mozilla/5.0"})
+    response = opener.open(req, timeout=60)
+    content_type = response.headers.get("Content-Type", "")
+
+    if "text/html" in content_type:
+        html = response.read().decode("utf-8", errors="replace")
+        response.close()
+
+        confirm_match = _re.search(r'confirm=([0-9A-Za-z_-]+)', html)
+        uuid_match = _re.search(r'[?&]uuid=([0-9A-Za-z_-]+)', html)
+
+        if confirm_match:
+            confirm_url = f"https://drive.google.com/uc?export=download&confirm={confirm_match.group(1)}&id={file_id}"
+            if uuid_match:
+                confirm_url += f"&uuid={uuid_match.group(1)}"
+            req2 = urllib.request.Request(confirm_url, headers={"User-Agent": "Mozilla/5.0"})
+            response = opener.open(req2, timeout=60)
+        else:
+            action_match = _re.search(r'action="([^"]+)"', html)
+            if not action_match:
+                raise RuntimeError(
+                    "Google Driveの確認ページを解析できませんでした。\n"
+                    "ファイルの共有設定を「リンクを知っている全員が閲覧可」に変更してください。"
+                )
+            action_url = action_match.group(1).replace("&amp;", "&")
+            req2 = urllib.request.Request(action_url, headers={"User-Agent": "Mozilla/5.0"})
+            response = opener.open(req2, timeout=60)
+
+    with open(dest_path, "wb") as f:
+        while True:
+            chunk = response.read(4 * 1024 * 1024)
+            if not chunk:
+                break
+            f.write(chunk)
+    response.close()
+
+    if dest_path.stat().st_size == 0:
+        raise RuntimeError(
+            "ダウンロードしたファイルが空です。\n"
+            "ファイルの共有設定を「リンクを知っている全員が閲覧可」に変更してください。"
+        )
+
+
 def _download_and_process(job_id: str, drive_url: str) -> None:
-    """Stream Google Drive video through ffmpeg directly — no video file stored on disk."""
+    """Download Google Drive video then extract audio with ffmpeg."""
     tmpdir = tempfile.mkdtemp()
     try:
-        _push(job_id, {"type": "progress", "step": 2, "pct": 10,
-                       "message": "Google Driveから音声を抽出中（大容量ファイルは数十分かかる場合があります）..."})
-
         file_id = _extract_drive_file_id(drive_url)
-        download_url = (
-            f"https://drive.usercontent.google.com/download"
-            f"?id={file_id}&export=download&confirm=t"
-        )
-        audio_path = Path(tmpdir) / "audio.mp3"
 
-        # ffmpeg streams the video directly from the URL and extracts audio.
-        # The 9GB video is never written to disk — only the ~30MB MP3 is stored.
+        _push(job_id, {"type": "progress", "step": 2, "pct": 5,
+                       "message": "Google Driveからダウンロード中（大容量ファイルは数十分かかる場合があります）..."})
+
+        video_path = Path(tmpdir) / "video.mp4"
+        _download_drive_file(file_id, video_path)
+
+        size_mb = video_path.stat().st_size / (1024 * 1024)
+        _push(job_id, {"type": "progress", "step": 2, "pct": 20,
+                       "message": f"ダウンロード完了（{size_mb:.0f}MB）。音声を抽出中..."})
+
+        audio_path = Path(tmpdir) / "audio.mp3"
         result = subprocess.run(
             [
                 "ffmpeg", "-y",
-                "-user_agent", "Mozilla/5.0",
-                "-i", download_url,
+                "-i", str(video_path),
                 "-vn", "-ar", "16000", "-ac", "1", "-b:a", "32k",
                 str(audio_path),
             ],
@@ -187,24 +240,13 @@ def _download_and_process(job_id: str, drive_url: str) -> None:
         )
 
         if result.returncode != 0:
-            stderr = result.stderr
-            if "403" in stderr or "Forbidden" in stderr:
-                raise RuntimeError(
-                    "Google Driveへのアクセスが拒否されました。\n"
-                    "ファイルの共有設定を「リンクを知っている全員が閲覧可」に変更してください。"
-                )
-            if "404" in stderr or "not found" in stderr.lower():
-                raise RuntimeError("ファイルが見つかりません。URLが正しいか確認してください。")
             raise RuntimeError(
-                f"音声抽出に失敗しました。URLが正しいか、ファイルが動画形式か確認してください。\n"
-                f"詳細: {stderr[-300:]}"
+                f"音声の抽出に失敗しました。動画ファイルが壊れているか、非対応の形式の可能性があります。\n"
+                f"詳細: {result.stderr[-300:]}"
             )
 
         if not audio_path.exists() or audio_path.stat().st_size == 0:
-            raise RuntimeError(
-                "音声ファイルの作成に失敗しました。\n"
-                "共有設定が「リンクを知っている全員が閲覧可」になっているか確認してください。"
-            )
+            raise RuntimeError("音声ファイルの作成に失敗しました。")
 
         _push(job_id, {"type": "progress", "step": 3, "pct": 30,
                        "message": "文字起こし中（数分かかります）..."})
