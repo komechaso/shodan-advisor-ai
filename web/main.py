@@ -159,24 +159,23 @@ def _extract_drive_file_id(url: str) -> str:
     )
 
 
-def _download_drive_file(file_id: str, dest_path: Path) -> None:
+def _download_drive_file(drive_url: str, dest_path: Path) -> None:
     """Download a Google Drive file using gdown (purpose-built for Drive downloads)."""
     import gdown
 
-    url = f"https://drive.google.com/uc?id={file_id}"
     try:
-        gdown.download(url, str(dest_path), quiet=True, fuzzy=True)
+        gdown.download(drive_url, str(dest_path), quiet=True, fuzzy=True)
     except Exception as e:
         raise RuntimeError(
             f"Google Driveからのダウンロードに失敗しました。\n"
-            f"ファイルの共有設定を「リンクを知っている全員が閲覧可」に変更してください。\n"
+            f"ファイルの共有設定を「リンクを知っている全員が閲覧可・編集可」にしてください。\n"
             f"詳細: {e}"
         )
 
     if not dest_path.exists() or dest_path.stat().st_size == 0:
         raise RuntimeError(
             "ダウンロードしたファイルが空です。\n"
-            "ファイルの共有設定を「リンクを知っている全員が閲覧可」に変更してください。"
+            "ファイルの共有設定を「リンクを知っている全員が閲覧可・編集可」にしてください。"
         )
 
 
@@ -184,13 +183,11 @@ def _download_and_process(job_id: str, drive_url: str) -> None:
     """Download Google Drive video then extract audio with ffmpeg."""
     tmpdir = tempfile.mkdtemp()
     try:
-        file_id = _extract_drive_file_id(drive_url)
-
         _push(job_id, {"type": "progress", "step": 2, "pct": 5,
                        "message": "Google Driveからダウンロード中（大容量ファイルは数十分かかる場合があります）..."})
 
         video_path = Path(tmpdir) / "video.mp4"
-        _download_drive_file(file_id, video_path)
+        _download_drive_file(drive_url, video_path)
 
         size_mb = video_path.stat().st_size / (1024 * 1024)
         _push(job_id, {"type": "progress", "step": 2, "pct": 20,
